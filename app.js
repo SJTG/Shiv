@@ -3,21 +3,11 @@
    ================================================ */
 
 // ─── AI Configuration ──────────────────────────────────────────────────────────
-// TODO: Replace with your actual API key. Currently set up for OpenAI.
-//       You can swap this for any other provider (Anthropic, Gemini, etc.)
-//       by updating the API_URL and the fetch() call in callAI() below.
-const AI_API_KEY = 'YOUR_OPENAI_API_KEY_HERE'; // TODO: Set your API key here
+// ia_api_key is loaded from config.js (git-ignored).
+// To set your key: open config.js and paste your Gemini API key there.
+// Provider: Google Gemini — https://ai.google.dev/
 
-// TODO: Edit this prompt to define how the AI should modify the CV/resume.
-//       The job application text entered by the user will be appended to this.
-const AI_SYSTEM_PROMPT = `You are a professional CV and resume editor. 
-The user will provide their current CV/resume text and a job application description.
-Your task is to rewrite the CV to better match the job application while keeping all 
-factual information accurate and truthful. 
-Improve the language, highlight relevant skills and experiences, and tailor the 
-tone to fit the job description. 
-Return ONLY the full modified CV text, preserving the original structure and sections 
-as much as possible. Do not add any commentary or preamble.`;
+const AI_SYSTEM_PROMPT = `You are a professional CV editor. You will receive a structured JSON representing a CV and a job description. Rewrite ONLY the text values to better match the job description. Rules: do NOT rename, add, or remove any keys or array items. Do NOT change structure or nesting. Keep all facts unchanged. Return ONLY valid minified JSON with no commentary, no markdown fences, no preamble.`;
 
 // ─── PDF.js setup ─────────────────────────────────────────────────────────────
 const pdfjsLib = window['pdfjs-dist/build/pdf'];
@@ -26,58 +16,59 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 // ─── State ─────────────────────────────────────────────────────────────────────
 const state = {
-  pdfDoc:         null,
-  pdfBytes:       null,
-  leftZoom:       1.0,
-  rightZoom:      1.0,
-  currentPage:    1,
-  totalPages:     0,
-  syncScroll:     true,
-  history:        [],
-  hasModified:    false,
-  isProcessing:   false,
-  originalText:   '',   // extracted text from the uploaded PDF
-  modifiedText:   '',   // AI-generated modified text
+  pdfDoc: null,
+  pdfBytes: null,
+  leftZoom: 1.0,
+  rightZoom: 1.0,
+  currentPage: 1,
+  totalPages: 0,
+  syncScroll: true,
+  history: [],
+  hasModified: false,
+  isProcessing: false,
+  parsedCV: null, // structured JSON extracted from the uploaded PDF
+  modifiedCV: null, // AI-modified structured JSON
 };
 
 // ─── DOM refs ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
 const els = {
-  fileInput:            $('fileInput'),
-  uploadTrigger:        $('uploadTrigger'),
-  downloadBtn:          $('downloadBtn'),
-  dropZone:             $('dropZone'),
-  leftPdfViewer:        $('leftPdfViewer'),
-  rightPdfViewer:       $('rightPdfViewer'),
-  leftCanvasContainer:  $('leftCanvasContainer'),
+  fileInput: $('fileInput'),
+  uploadTrigger: $('uploadTrigger'),
+  downloadBtn: $('downloadBtn'),
+  dropZone: $('dropZone'),
+  leftPdfViewer: $('leftPdfViewer'),
+  rightPdfViewer: $('rightPdfViewer'),
+  leftCanvasContainer: $('leftCanvasContainer'),
   rightCanvasContainer: $('rightCanvasContainer'),
-  leftFooter:           $('leftFooter'),
-  rightFooter:          $('rightFooter'),
-  emptyModified:        $('emptyModified'),
-  leftPageInfo:         $('leftPageInfo'),
-  rightPageInfo:        $('rightPageInfo'),
-  fileName:             $('fileName'),
-  zoomLeftLabel:        $('zoomLeftLabel'),
-  zoomRightLabel:       $('zoomRightLabel'),
-  jobApplicationInput:  $('jobApplicationInput'),
-  charCount:            $('charCount'),
-  clearBtn:             $('clearBtn'),
-  divider:              $('divider'),
-  editorResizeHandle:   $('editorResizeHandle'),
-  editorSection:        $('editorSection'),
-  splitView:            $('splitView'),
-  diffBadge:            $('diffBadge'),
-  diffCount:            $('diffCount'),
-  diffEmpty:            $('diffEmpty'),
-  diffContent:          $('diffContent'),
-  historyEmpty:         $('historyEmpty'),
-  historyList:          $('historyList'),
-  toast:                $('toast'),
-  toastMsg:             $('toastMsg'),
-  syncScrollBtn:        $('syncScrollBtn'),
-  processingOverlay:    $('processingOverlay'),
-  processingStatus:     $('processingStatus'),
+  leftFooter: $('leftFooter'),
+  rightFooter: $('rightFooter'),
+  emptyModified: $('emptyModified'),
+  leftPageInfo: $('leftPageInfo'),
+  rightPageInfo: $('rightPageInfo'),
+  fileName: $('fileName'),
+  zoomLeftLabel: $('zoomLeftLabel'),
+  zoomRightLabel: $('zoomRightLabel'),
+  jobApplicationInput: $('jobApplicationInput'),
+  charCount: $('charCount'),
+  clearBtn: $('clearBtn'),
+  divider: $('divider'),
+  editorResizeHandle: $('editorResizeHandle'),
+  editorSection: $('editorSection'),
+  splitView: $('splitView'),
+  diffBadge: $('diffBadge'),
+  diffCount: $('diffCount'),
+  diffEmpty: $('diffEmpty'),
+  diffContent: $('diffContent'),
+  historyEmpty: $('historyEmpty'),
+  historyList: $('historyList'),
+  toast: $('toast'),
+  toastMsg: $('toastMsg'),
+  syncScrollBtn: $('syncScrollBtn'),
+  processingOverlay: $('processingOverlay'),
+  processingStatus: $('processingStatus'),
+  tailorBtn: $('tailorBtn'),
 };
 
 // ─── Toast ─────────────────────────────────────────────────────────────────────
@@ -130,55 +121,326 @@ document.body.addEventListener('drop', e => {
   if (file && file.type === 'application/pdf') loadPDF(file);
 });
 
-// ─── Load PDF ──────────────────────────────────────────────────────────────────
-async function loadPDF(file) {
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    state.pdfBytes = new Uint8Array(arrayBuffer);
-
-    const loadingTask = pdfjsLib.getDocument({ data: state.pdfBytes.slice() });
-    state.pdfDoc = await loadingTask.promise;
-    state.totalPages = state.pdfDoc.numPages;
-    state.currentPage = 1;
-
-    els.fileName.textContent = file.name;
-    els.dropZone.style.display = 'none';
-    els.leftPdfViewer.style.display = 'flex';
-    els.leftFooter.style.display = 'flex';
-    els.downloadBtn.disabled = false;
-
-    await renderAllPages('left');
-    updatePageInfo();
-
-    // Extract the full text from the PDF for the AI
-    showProcessing('Reading PDF text…');
-    state.originalText = await extractTextFromPDF(state.pdfDoc);
-    hideProcessing();
-
-    showToast(`Loaded: ${file.name} — add your job application and the CV will be tailored automatically`, '📄');
-
-    // If there's already a job application typed in, auto-process right away
-    const jobApp = els.jobApplicationInput.value.trim();
-    if (jobApp.length > 20) {
-      await processWithAI(jobApp);
+// ─── Load PDF ───────────────────────────────────────────────────────────�// ─── Deterministic PDF → Structured JSON Parser ─────────────────────────────────
+async function parsePDFToJSON(pdfDoc) {
+  // 1. Collect all text items across all pages
+  const allItems = [];
+  for (let p = 1; p <= pdfDoc.numPages; p++) {
+    const page = await pdfDoc.getPage(p);
+    const content = await page.getTextContent();
+    for (const item of content.items) {
+      if (!item.str) continue; // keep whitespace-only for spacing
+      allItems.push({
+        str: item.str,
+        x: item.transform[4],
+        y: item.transform[5],
+        fontName: item.fontName || '',
+        height: item.height || 0,
+        page: p,
+      });
     }
-  } catch (err) {
-    console.error(err);
-    hideProcessing();
-    showToast('Failed to load PDF', '❌');
   }
+
+  // 2. Sort by (page ASC, y DESC, x ASC)
+  allItems.sort((a, b) => {
+    if (a.page !== b.page) return a.page - b.page;
+    if (Math.abs(a.y - b.y) > 2) return b.y - a.y;
+    return a.x - b.x;
+  });
+
+  // 3. RECONSTRUCT FULL LINES — group items by (page, y-coordinate)
+  //    This is critical because pdfjs splits text into tiny fragments.
+  const lines = [];
+  let currentLine = null;
+  for (const item of allItems) {
+    if (!currentLine ||
+      currentLine.page !== item.page ||
+      Math.abs(currentLine.y - item.y) > 2) {
+      // Start new line
+      currentLine = {
+        page: item.page,
+        y: item.y,
+        maxHeight: item.height,
+        parts: [item.str],
+      };
+      lines.push(currentLine);
+    } else {
+      // Same line — append
+      currentLine.parts.push(item.str);
+      currentLine.maxHeight = Math.max(currentLine.maxHeight, item.height);
+    }
+  }
+
+  // Join parts into full text per line
+  const textLines = lines.map(l => ({
+    text: l.parts.join('').trim(),
+    height: l.maxHeight,
+    page: l.page,
+  })).filter(l => l.text);
+
+  console.log('[PDF Parser] Reconstructed lines:', textLines.map(l => l.text));
+
+  // 4. Build the structured CV object
+  const cv = {
+    name: '',
+    contact: { location: '', email: '', phone: '', portfolio: '', linkedin: '' },
+    sections: {
+      about_me: { content: '' },
+      education: { institution: '', degree: '', coursework: [], period: '' },
+      experience: [],
+      skills: { technical: [], competencies: [], languages: [] },
+    },
+  };
+
+  // Flexible section matching
+  function detectSection(text) {
+    const low = text.toLowerCase().trim();
+    if (low === 'about me') return 'about_me';
+    if (low === 'education') return 'education';
+    if (low === 'experience') return 'experience';
+    if (/^skills/i.test(low) || low === 'skills & interests'
+      || low === 'skills and interests' || low === 'skills') return 'skills';
+    return null;
+  }
+
+  let currentSection = null;
+  let currentEntry = null;
+  let nameFound = false;
+  let contactParsed = false;
+  let skillsSubsection = 'technical'; // track which skills sub-array we're filling
+
+  // Find largest font on page 1 for the name
+  const page1Lines = textLines.filter(l => l.page === 1);
+  const maxHeight = Math.max(...page1Lines.map(l => l.height), 0);
+
+  for (let idx = 0; idx < textLines.length; idx++) {
+    const line = textLines[idx];
+    const text = line.text;
+    const lower = text.toLowerCase();
+    const height = line.height;
+
+    // RULE 7: NAME — first line on page 1 with the largest font
+    if (!nameFound && line.page === 1 && Math.abs(height - maxHeight) < 0.5) {
+      cv.name = (cv.name ? cv.name + ' ' : '') + text;
+      nameFound = true;
+      continue;
+    }
+
+    // RULE 6: CONTACT LINE — everything between name and first section
+    if (nameFound && !contactParsed) {
+      const sec = detectSection(text);
+      if (sec) {
+        contactParsed = true;
+        currentSection = sec;
+        currentEntry = null;
+        continue;
+      }
+      // Parse contact: split by bullet separators
+      const parts = text.split(/\s*[•●‣]\s*/);
+      for (const part of parts) {
+        const p = part.trim();
+        if (!p) continue;
+        if (p.includes('@')) cv.contact.email = p;
+        else if (/linkedin\.com/i.test(p) || /linkedin/i.test(p)) cv.contact.linkedin = p;
+        else if (/github\.com/i.test(p) || /github/i.test(p)) cv.contact.portfolio = p;
+        else if (/^\+?[\d\s\-().]{7,20}$/.test(p)) cv.contact.phone = p;
+        else if (!cv.contact.location) cv.contact.location = p;
+        else cv.contact.location += ', ' + p;
+      }
+      continue;
+    }
+
+    // RULE 1: SECTION DETECTION
+    const sec = detectSection(text);
+    if (sec) {
+      contactParsed = true;
+      currentSection = sec;
+      currentEntry = null;
+      skillsSubsection = 'technical';
+      continue;
+    }
+
+    // RULE 2: BULLET DETECTION
+    const isBullet = /^[●•]/.test(text);
+    const bulletText = isBullet ? text.replace(/^[●•]\s*/, '') : '';
+
+    // ── EXPERIENCE SECTION ──
+    if (currentSection === 'experience') {
+      if (isBullet) {
+        if (currentEntry) currentEntry.bullets.push(bulletText);
+        continue;
+      }
+      // RULE 3: new job title (larger font, not a bullet)
+      if (height >= 10) {
+        currentEntry = { title: text, modality: '', period: '', bullets: [] };
+        cv.sections.experience.push(currentEntry);
+        continue;
+      }
+      // RULE 4: MODALITY / PERIOD
+      if (currentEntry) {
+        if (/(Presencial|Remote|Híbrido|Hybrid)/i.test(text)) {
+          currentEntry.modality = (currentEntry.modality ? currentEntry.modality + ' ' : '') + text;
+        } else if (/\d{4}/.test(text) || /present/i.test(text)) {
+          currentEntry.period = (currentEntry.period ? currentEntry.period + ' ' : '') + text;
+        } else {
+          currentEntry.title += ' ' + text;
+        }
+      }
+      continue;
+    }
+
+    // ── SKILLS SECTION ──
+    if (currentSection === 'skills') {
+      // Detect subsection label
+      if (/^Technical\s+Skills:?/i.test(text)) {
+        skillsSubsection = 'technical';
+        const rest = text.replace(/^Technical\s+Skills:?\s*/i, '');
+        if (rest) cv.sections.skills.technical.push(...rest.split(/\s*\|\s*/).filter(Boolean));
+        continue;
+      }
+      if (/^Core\s+Competencies:?/i.test(text)) {
+        skillsSubsection = 'competencies';
+        const rest = text.replace(/^Core\s+Competencies:?\s*/i, '');
+        if (rest) cv.sections.skills.competencies.push(...rest.split(/\s*\|\s*/).filter(Boolean));
+        continue;
+      }
+      if (/^Languages:?/i.test(text)) {
+        skillsSubsection = 'languages';
+        const rest = text.replace(/^Languages:?\s*/i, '');
+        if (rest) cv.sections.skills.languages.push(...rest.split(/\s*\|\s*/).filter(Boolean));
+        continue;
+      }
+      // Any other text in skills — append items split by | to current subsection
+      if (isBullet) {
+        cv.sections.skills[skillsSubsection].push(bulletText);
+      } else if (text.includes('|')) {
+        cv.sections.skills[skillsSubsection].push(...text.split(/\s*\|\s*/).filter(Boolean));
+      } else {
+        cv.sections.skills[skillsSubsection].push(text);
+      }
+      continue;
+    }
+
+    // ── ABOUT ME ──
+    if (currentSection === 'about_me') {
+      cv.sections.about_me.content += (cv.sections.about_me.content ? ' ' : '') + text;
+      continue;
+    }
+
+    // ── EDUCATION ──
+    if (currentSection === 'education') {
+      // Period line: contains a year AND possibly "present"
+      if (/\d{4}/.test(text) && (/present/i.test(text) || /–|—|-/.test(text))) {
+        cv.sections.education.period = text;
+        continue;
+      }
+      // Coursework heading
+      if (/^(Relevant|Related)\s+Coursework/i.test(text)) {
+        const rest = text.replace(/^(Relevant|Related)\s+Coursework:?\s*/i, '');
+        if (rest) cv.sections.education.coursework = rest.split(/\s*[,|]\s*/).filter(Boolean);
+        continue;
+      }
+      // Degree line: contains typical degree keywords
+      if (/bachelor|master|licenciatura|ingenier|associate|b\.?s\.?|m\.?s\.?|ph\.?d|degree/i.test(text)) {
+        cv.sections.education.degree = text.replace(/^[-–—]\s*/, '').trim();
+        continue;
+      }
+      // Institution (first non-matched text)
+      if (!cv.sections.education.institution) {
+        cv.sections.education.institution = text;
+        continue;
+      }
+      // If degree not yet set and this is a short line, treat as degree
+      if (!cv.sections.education.degree) {
+        cv.sections.education.degree = text.replace(/^[-–—]\s*/, '').trim();
+        continue;
+      }
+      // Otherwise coursework
+      cv.sections.education.coursework.push(...text.split(/\s*[,|]\s*/).filter(Boolean));
+      continue;
+    }
+  }
+
+  return cv;
+} iod = (currentEntry.period ? currentEntry.period + ' ' : '') + trimmed;
+      } else {
+  // Append to title or modality as metadata
+  currentEntry.title += ' ' + trimmed;
+}
+continue;
+    }
+
+// ABOUT ME
+if (currentSection === 'about_me') {
+  cv.sections.about_me.content += (cv.sections.about_me.content ? ' ' : '') + trimmed;
+  continue;
 }
 
-// ─── Extract Text from PDF ─────────────────────────────────────────────────────
-async function extractTextFromPDF(pdfDoc) {
-  let fullText = '';
-  for (let i = 1; i <= pdfDoc.numPages; i++) {
-    const page = await pdfDoc.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items.map(item => item.str).join(' ');
-    fullText += `\n--- Page ${i} ---\n${pageText}`;
+// EDUCATION
+if (currentSection === 'education') {
+  if (/^(Relevant|Related)\s+Coursework/i.test(trimmed)) {
+    const rest = trimmed.replace(/^(Relevant|Related)\s+Coursework:?\s*/i, '');
+    if (rest) cv.sections.education.coursework = rest.split(/\s*[,|]\s*/).filter(Boolean);
+  } else if (/\d{4}/.test(trimmed)) {
+    cv.sections.education.period = trimmed;
+  } else if (!cv.sections.education.institution) {
+    cv.sections.education.institution = trimmed;
+  } else if (!cv.sections.education.degree) {
+    cv.sections.education.degree = trimmed;
+  } else {
+    // Additional coursework items
+    cv.sections.education.coursework.push(...trimmed.split(/\s*[,|]\s*/).filter(Boolean));
   }
-  return fullText.trim();
+  continue;
+}
+  }
+
+return cv;
+}
+
+// Helper: flatten parsed CV JSON back to readable text for display
+function cvJsonToText(cv) {
+  if (!cv) return '';
+  const lines = [];
+  lines.push(cv.name || '');
+  const c = cv.contact;
+  const contactParts = [c.location, c.email, c.phone, c.portfolio, c.linkedin].filter(Boolean);
+  if (contactParts.length) lines.push(contactParts.join(' • '));
+  lines.push('');
+
+  if (cv.sections.about_me?.content) {
+    lines.push('ABOUT ME');
+    lines.push(cv.sections.about_me.content);
+    lines.push('');
+  }
+
+  const edu = cv.sections.education;
+  if (edu?.institution) {
+    lines.push('EDUCATION');
+    lines.push(`${edu.institution}  ${edu.period || ''}`.trim());
+    if (edu.degree) lines.push(edu.degree);
+    if (edu.coursework?.length) lines.push('Coursework: ' + edu.coursework.join(', '));
+    lines.push('');
+  }
+
+  if (cv.sections.experience?.length) {
+    lines.push('EXPERIENCE');
+    for (const exp of cv.sections.experience) {
+      lines.push(`${exp.title}  ${exp.modality}  ${exp.period}`.trim());
+      for (const b of exp.bullets) lines.push(`  • ${b}`);
+    }
+    lines.push('');
+  }
+
+  const sk = cv.sections.skills;
+  if (sk?.technical?.length || sk?.competencies?.length || sk?.languages?.length) {
+    lines.push('SKILLS & INTERESTS');
+    if (sk.technical.length) lines.push('Technical: ' + sk.technical.join(' | '));
+    if (sk.competencies.length) lines.push('Competencies: ' + sk.competencies.join(' | '));
+    if (sk.languages.length) lines.push('Languages: ' + sk.languages.join(' | '));
+  }
+
+  return lines.join('\n');
 }
 
 // ─── Render All Pages ──────────────────────────────────────────────────────────
@@ -200,9 +462,9 @@ async function renderAllPages(side) {
     wrapper.style.animationDelay = `${(pageNum - 1) * 0.05}s`;
 
     const canvas = document.createElement('canvas');
-    canvas.width  = viewport.width;
+    canvas.width = viewport.width;
     canvas.height = viewport.height;
-    canvas.style.width  = displayViewport.width  + 'px';
+    canvas.style.width = displayViewport.width + 'px';
     canvas.style.height = displayViewport.height + 'px';
 
     wrapper.appendChild(canvas);
@@ -216,7 +478,7 @@ async function renderAllPages(side) {
 // ─── Page Info ─────────────────────────────────────────────────────────────────
 function updatePageInfo() {
   const info = `${state.totalPages} page${state.totalPages !== 1 ? 's' : ''}`;
-  els.leftPageInfo.textContent  = info;
+  els.leftPageInfo.textContent = info;
   els.rightPageInfo.textContent = info;
 }
 
@@ -236,14 +498,14 @@ async function setZoom(side, delta) {
   }
 }
 
-$('zoomInLeft') .addEventListener('click', () => setZoom('left',  +0.25));
-$('zoomOutLeft').addEventListener('click', () => setZoom('left',  -0.25));
-$('zoomInRight') .addEventListener('click', () => setZoom('right', +0.25));
+$('zoomInLeft').addEventListener('click', () => setZoom('left', +0.25));
+$('zoomOutLeft').addEventListener('click', () => setZoom('left', -0.25));
+$('zoomInRight').addEventListener('click', () => setZoom('right', +0.25));
 $('zoomOutRight').addEventListener('click', () => setZoom('right', -0.25));
 
 // ─── Sync Scroll ───────────────────────────────────────────────────────────────
 let syncLock = false;
-const leftBody  = $('leftPanelBody');
+const leftBody = $('leftPanelBody');
 const rightBody = $('rightPanelBody');
 
 els.syncScrollBtn.addEventListener('click', () => {
@@ -268,21 +530,20 @@ rightBody.addEventListener('scroll', () => {
   setTimeout(() => syncLock = false, 50);
 });
 
-// ─── Job Application Input — auto-trigger on paste / typing ───────────────────
-let debounceTimer;
+// ─── Job Application Input — Manual Trigger ────────────────────────────────────
 els.jobApplicationInput.addEventListener('input', () => {
   const len = els.jobApplicationInput.value.length;
   els.charCount.textContent = len === 0
     ? '0 characters'
     : `${len} character${len !== 1 ? 's' : ''}`;
+});
 
-  // Auto-process: wait 1.5s of inactivity before calling AI
-  // Only fires if a PDF is already loaded
-  clearTimeout(debounceTimer);
-  if (state.pdfDoc && len > 20 && !state.isProcessing) {
-    debounceTimer = setTimeout(() => {
-      processWithAI(els.jobApplicationInput.value.trim());
-    }, 1500);
+els.tailorBtn.addEventListener('click', () => {
+  const jobApp = els.jobApplicationInput.value.trim();
+  if (jobApp.length > 20) {
+    processWithAI(jobApp);
+  } else {
+    showToast('Please paste a job application first (min 20 chars)', '⚠️');
   }
 });
 
@@ -292,72 +553,77 @@ els.clearBtn.addEventListener('click', () => {
   els.jobApplicationInput.focus();
 });
 
-// ─── Call OpenAI API ───────────────────────────────────────────────────────────
-// TODO: If you switch providers, update API_URL and the request body format below.
-//       For OpenAI: https://api.openai.com/v1/chat/completions  (model: gpt-4o)
-//       For Anthropic: https://api.anthropic.com/v1/messages    (model: claude-3-5-sonnet-20241022)
-//       For Gemini: https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent
-const AI_API_URL = 'https://api.openai.com/v1/chat/completions'; // TODO: Change if using a different provider
+// ─── Call Gemini API ────────────────────────────────────────────────────────
+// Provider: Google Gemini — generativelanguage.googleapis.com
+const GEMINI_MODEL = 'gemini-flash-latest';
 
-async function callAI(cvText, jobApplicationText) {
-  const userMessage =
-    `Here is my current CV/resume:\n\n${cvText}\n\n` +
-    `---\n\nHere is the job application I am applying for:\n\n${jobApplicationText}\n\n` +
-    `Please rewrite my CV to be tailored for this specific job application.`;
+async function callAI(cvJSON, jobApplicationText) {
+  const prompt =
+    `${AI_SYSTEM_PROMPT}\n\n` +
+    `CV JSON:\n${JSON.stringify(cvJSON)}\n\n` +
+    `---\n\nJob description:\n${jobApplicationText}`;
 
-  // TODO: Update model name if needed (e.g. 'gpt-4-turbo', 'gpt-3.5-turbo', etc.)
-  const response = await fetch(AI_API_URL, {
+  const endpoint =
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${ia_api_key}`;
+  const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${AI_API_KEY}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'gpt-4o', // TODO: Change model as needed
-      messages: [
-        { role: 'system', content: AI_SYSTEM_PROMPT },
-        { role: 'user',   content: userMessage },
-      ],
-      max_tokens: 4096,
-      temperature: 0.7,
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.5,
+        maxOutputTokens: 8192,
+        responseMimeType: 'application/json',
+      },
     }),
   });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${response.status}`);
+    throw new Error(
+      err?.error?.message || `Gemini API error ${response.status}`
+    );
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content?.trim() ?? '';
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+
+  // Strip markdown fences if Gemini wraps them anyway
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  return JSON.parse(cleaned);
 }
 
 // ─── Process PDF with AI ───────────────────────────────────────────────────────
 async function processWithAI(jobApplicationText) {
-  if (!state.pdfDoc || !state.originalText) {
+  if (!state.pdfDoc || !state.parsedCV) {
     showToast('Upload a PDF first', '📄');
     return;
   }
   if (state.isProcessing) return;
-  if (!AI_API_KEY || AI_API_KEY === 'YOUR_OPENAI_API_KEY_HERE') {
-    showToast('Please set your API key in app.js (AI_API_KEY)', '🔑');
+  if (!ia_api_key || ia_api_key === 'your_gemini_api_key_here') {
+    showToast('Please set your Gemini API key in config.js (ia_api_key)', '🔑');
     return;
   }
 
   state.isProcessing = true;
 
   try {
-    showProcessing('Sending CV to AI for tailoring…');
+    showProcessing('Sending structured CV to AI…');
     showToast('AI is tailoring your CV…', '🤖');
 
-    const modifiedText = await callAI(state.originalText, jobApplicationText);
-    state.modifiedText = modifiedText;
+    const modifiedCV = await callAI(state.parsedCV, jobApplicationText);
+    state.modifiedCV = modifiedCV;
+    console.log('[AI] Modified CV JSON:', modifiedCV);
+
+    // Convert JSON back to readable text for display
+    const modifiedText = cvJsonToText(modifiedCV);
+    const originalText = cvJsonToText(state.parsedCV);
 
     showProcessing('Rendering modified preview…');
     await showModifiedPanel(modifiedText, jobApplicationText);
 
     addToHistory(jobApplicationText, modifiedText);
-    showDiff(state.originalText, modifiedText, jobApplicationText);
+    showDiff(originalText, modifiedText, jobApplicationText);
 
     showToast('CV tailored successfully!', '✅');
   } catch (err) {
@@ -422,21 +688,26 @@ async function showModifiedPanel(modifiedText, jobAppText) {
   state.hasModified = true;
   els.diffBadge.classList.add('visible');
 
-  // Count changed lines as a rough diff metric
-  const origLines = state.originalText.split('\n').filter(l => l.trim());
-  const modLines  = modifiedText.split('\n').filter(l => l.trim());
-  const changed   = Math.abs(modLines.length - origLines.length) + Math.floor(origLines.length * 0.3);
+  // Count changed fields as a rough diff metric
+  const origStr = JSON.stringify(state.parsedCV || {});
+  const modStr = JSON.stringify(state.modifiedCV || {});
+  let changed = 0;
+  const origVals = origStr.match(/"[^"]+"/g) || [];
+  const modVals = modStr.match(/"[^"]+"/g) || [];
+  for (let i = 0; i < Math.max(origVals.length, modVals.length); i++) {
+    if (origVals[i] !== modVals[i]) changed++;
+  }
   els.diffCount.textContent = `~${changed} changes`;
 }
 
 // ─── Text Overlay on Canvas ────────────────────────────────────────────────────
 function renderTextOverlay(ctx, text, w, h, bannerH, dpr) {
-  const margin    = Math.round(w * 0.06);
-  const lineH     = Math.round(h * 0.022);
-  const fontSize  = Math.round(lineH * 0.72);
-  const startY    = bannerH + margin;
-  const maxY      = h - margin;
-  const maxWidth  = w - margin * 2;
+  const margin = Math.round(w * 0.06);
+  const lineH = Math.round(h * 0.022);
+  const fontSize = Math.round(lineH * 0.72);
+  const startY = bannerH + margin;
+  const maxY = h - margin;
+  const maxWidth = w - margin * 2;
 
   ctx.save();
   // White background for text area
@@ -456,7 +727,7 @@ function renderTextOverlay(ctx, text, w, h, bannerH, dpr) {
 
   for (const word of words) {
     const testLine = line + (line ? ' ' : '') + word;
-    const metrics  = ctx.measureText(testLine);
+    const metrics = ctx.measureText(testLine);
 
     if (word === '\n' || metrics.width > maxWidth) {
       ctx.fillText(line, margin, y);
@@ -483,17 +754,17 @@ function showDiff(originalText, modifiedText, jobAppText) {
 
   // Word-level diff between original and modified text
   const origWords = originalText.split(/\s+/).slice(0, 300); // preview first 300 words
-  const modWords  = modifiedText.split(/\s+/).slice(0, 300);
+  const modWords = modifiedText.split(/\s+/).slice(0, 300);
 
   // Build a simple line-by-line diff of the first ~30 lines each
   const origLines = originalText.split('\n').slice(0, 30);
-  const modLines  = modifiedText.split('\n').slice(0, 30);
+  const modLines = modifiedText.split('\n').slice(0, 30);
 
   let diffHTML = '';
   const maxLen = Math.max(origLines.length, modLines.length);
   for (let i = 0; i < maxLen; i++) {
     const o = origLines[i] ?? '';
-    const m = modLines[i]  ?? '';
+    const m = modLines[i] ?? '';
     if (o !== m) {
       if (o) diffHTML += `<div class="diff-removed">- ${escapeHtml(o)}</div>`;
       if (m) diffHTML += `<div class="diff-added">+ ${escapeHtml(m)}</div>`;
@@ -561,33 +832,115 @@ function switchTab(tabName) {
   );
 }
 
-// ─── Download ─────────────────────────────────────────────────────────────────
-// TODO: Implement real PDF generation from modifiedText using a library like
-//       pdf-lib or jsPDF, then trigger a Blob download. For now shows a toast.
-els.downloadBtn.addEventListener('click', () => {
+// ─── Download (pdf-lib) ────────────────────────────────────────────────────────
+// Uses pdf-lib (loaded via CDN) to write the AI-tailored text into a real PDF.
+els.downloadBtn.addEventListener('click', async () => {
   if (!state.hasModified) {
     showToast('Upload a PDF and let AI tailor it first', '⚠️');
     return;
   }
-  if (!state.modifiedText) {
+  if (!state.modifiedCV) {
     showToast('No modified content to export yet', '⚠️');
     return;
   }
-  // TODO: Generate proper PDF from state.modifiedText and trigger download
-  const blob = new Blob([state.modifiedText], { type: 'text/plain' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = 'tailored-cv.txt';
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Exported modified CV as text file (TODO: generate real PDF)', '💾');
+
+  // Convert JSON CV to text for PDF rendering
+  const exportText = cvJsonToText(state.modifiedCV);
+
+  try {
+    showProcessing('Generating PDF…');
+
+    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const PAGE_W = 595;   // A4 width  in pts
+    const PAGE_H = 842;   // A4 height in pts
+    const MARGIN = 50;
+    const LINE_H = 14;
+    const FONT_SZ = 11;
+    const maxW = PAGE_W - MARGIN * 2;
+
+    // Wrap text into lines that fit the page width
+    function wrapLines(text) {
+      const result = [];
+      for (const raw of text.split('\n')) {
+        const words = raw.split(' ');
+        let line = '';
+        for (const w of words) {
+          const test = line ? `${line} ${w}` : w;
+          const tw = font.widthOfTextAtSize(test, FONT_SZ);
+          if (tw > maxW && line) {
+            result.push(line);
+            line = w;
+          } else {
+            line = test;
+          }
+        }
+        result.push(line); // push last (or empty) line
+      }
+      return result;
+    }
+
+    const lines = wrapLines(exportText);
+    let page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+    let y = PAGE_H - MARGIN;
+
+    // Header banner on first page
+    page.drawRectangle({
+      x: 0, y: PAGE_H - 36,
+      width: PAGE_W, height: 36,
+      color: rgb(0.388, 0.4, 0.945), // #6366f1
+    });
+    page.drawText('AI-Tailored CV -- PDF Studio', {
+      x: MARGIN, y: PAGE_H - 24,
+      size: 13, font: bold,
+      color: rgb(1, 1, 1),
+    });
+    y = PAGE_H - MARGIN - 24;
+
+    for (const line of lines) {
+      if (y < MARGIN + LINE_H) {
+        // New page
+        page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+        y = PAGE_H - MARGIN;
+      }
+      if (line.trim()) {
+        // Strip any non-Latin1 chars that Helvetica can't render
+        const safeLine = line.replace(/[^\x00-\xFF]/g, '');
+        page.drawText(safeLine, {
+          x: MARGIN, y,
+          size: FONT_SZ, font,
+          color: rgb(0.1, 0.1, 0.13),
+        });
+      }
+      y -= LINE_H;
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tailored-cv.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast('PDF downloaded! ✦ AI-Tailored CV', '💾');
+  } catch (err) {
+    console.error('[PDF Export Error]', err);
+    showToast(`PDF export failed: ${err.message}`, '❌');
+  } finally {
+    hideProcessing();
+  }
 });
 
 // ─── Divider Drag (horizontal split) ──────────────────────────────────────────
 (function setupHorizontalDivider() {
   let dragging = false, startX = 0, startLeftW = 0;
-  const divider   = els.divider;
+  const divider = els.divider;
   const splitView = els.splitView;
 
   divider.addEventListener('mousedown', e => {
@@ -602,13 +955,13 @@ els.downloadBtn.addEventListener('click', () => {
 
   document.addEventListener('mousemove', e => {
     if (!dragging) return;
-    const delta    = e.clientX - startX;
-    const total    = splitView.getBoundingClientRect().width;
-    const divW     = divider.offsetWidth;
+    const delta = e.clientX - startX;
+    const total = splitView.getBoundingClientRect().width;
+    const divW = divider.offsetWidth;
     const newLeftW = Math.max(200, Math.min(total - divW - 200, startLeftW + delta));
     const newRightW = total - divW - newLeftW;
 
-    splitView.querySelector('.panel-left').style.flex  = `0 0 ${newLeftW}px`;
+    splitView.querySelector('.panel-left').style.flex = `0 0 ${newLeftW}px`;
     splitView.querySelector('.panel-right').style.flex = `0 0 ${newRightW}px`;
   });
 
@@ -624,7 +977,7 @@ els.downloadBtn.addEventListener('click', () => {
 // ─── Editor Resize (vertical) ─────────────────────────────────────────────────
 (function setupVerticalResize() {
   let dragging = false, startY = 0, startH = 0;
-  const handle  = els.editorResizeHandle;
+  const handle = els.editorResizeHandle;
   const section = els.editorSection;
 
   handle.addEventListener('mousedown', e => {
@@ -639,8 +992,8 @@ els.downloadBtn.addEventListener('click', () => {
   document.addEventListener('mousemove', e => {
     if (!dragging) return;
     const delta = startY - e.clientY;
-    const newH  = Math.max(120, Math.min(window.innerHeight * 0.6, startH + delta));
-    section.style.height    = newH + 'px';
+    const newH = Math.max(120, Math.min(window.innerHeight * 0.6, startH + delta));
+    section.style.height = newH + 'px';
     section.style.maxHeight = 'none';
   });
 
