@@ -11,7 +11,7 @@
   <input type="hidden" name="keywords" value="{{toJSON .Keywords}}">
   <div class="actions">
     <button type="submit">Proponer cambios</button>
-    <a class="btn secondary" href="/jobs/new">Volver</a>
+    <a class="btn secondary" href="/">Volver</a>
   </div>
   {{if not .HasReplaceable}}<p class="muted">Ninguna keyword es reemplazable por sinónimo: no hay nada para cambiar. Igual podés continuar y generar una versión con tu CV tal como está.</p>{{end}}
 </form>

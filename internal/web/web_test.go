@@ -157,10 +157,19 @@ func TestHomeEmptyState(t *testing.T) {
 		t.Fatalf("status %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Todavía no cargaste tu CV", "falta ANTHROPIC_API_KEY", "Chrome detectado", "Todavía no generaste ninguna versión"} {
+	for _, want := range []string{"Todavía no cargaste tu CV", "Falta ANTHROPIC_API_KEY", `action="/jobs/analyze"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("la home no contiene %q", want)
 		}
+	}
+	if strings.Contains(body, "No se puede generar el PDF") {
+		t.Error("la home muestra un aviso de PDF aunque Chrome está disponible")
+	}
+	if body := e.get("/versions").Body.String(); !strings.Contains(body, "Todavía no generaste ninguna versión") {
+		t.Error("la lista de versiones vacía no lo dice")
+	}
+	if rec := e.get("/jobs/new"); rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/" {
+		t.Errorf("/jobs/new: status %d location %q", rec.Code, rec.Header().Get("Location"))
 	}
 }
 
@@ -464,7 +473,7 @@ func TestFullFlowAndAntiInventionGuarantees(t *testing.T) {
 	}
 
 	// 5. La home lista la versión.
-	if body := e.get("/").Body.String(); !strings.Contains(body, "Backend Dev") || !strings.Contains(body, "/versions/"+id) {
+	if body := e.get("/versions").Body.String(); !strings.Contains(body, "Backend Dev") || !strings.Contains(body, "/versions/"+id) {
 		t.Fatal("la home no lista la versión")
 	}
 }

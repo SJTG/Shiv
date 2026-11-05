@@ -1,0 +1,25 @@
+{{define "content"}}
+<h1>Versiones</h1>
+<p class="muted" style="margin:0 0 20px">Una versión de tu CV por cada oferta.</p>
+
+{{if .VersionProblems}}<p class="error">Hay archivos de versiones que no se pudieron leer:{{range .VersionProblems}}<br>{{.}}{{end}}</p>{{end}}
+{{if .Versions}}
+<table>
+  <tr><th>Fecha</th><th>Puesto</th><th>Empresa</th><th></th></tr>
+  {{range .Versions}}
+  <tr>
+    <td class="muted">{{fmtTime .CreatedAt}}</td>
+    <td><strong>{{if .Title}}{{.Title}}{{else}}<span class="muted">sin puesto</span>{{end}}</strong></td>
+    <td>{{if .Company}}{{.Company}}{{else}}<span class="muted">sin empresa</span>{{end}}</td>
+    <td style="text-align:right;white-space:nowrap"><a href="/versions/{{.ID}}">abrir</a> · <a href="/versions/{{.ID}}/pdf">PDF</a></td>
+  </tr>
+  {{end}}
+</table>
+{{else}}
+<div class="card empty">
+  <span class="logo-mark" aria-hidden="true"></span>
+  Todavía no generaste ninguna versión.<br>
+  <a href="/">Cargá tu primera oferta</a>
+</div>
+{{end}}
+{{end}}

@@ -87,7 +87,7 @@ func New(st *store.Store, an ai.Analyzer, pdf render.PDFRenderer, pdfErr error, 
 		"fmtTime":     func(t time.Time) string { return t.Local().Format("02/01/2006 15:04") },
 		"statusLabel": statusLabel,
 	}
-	for _, name := range []string{"home", "cv", "job_new", "analysis", "changes", "version", "error"} {
+	for _, name := range []string{"home", "versions", "cv", "job_new", "analysis", "changes", "version", "error"} {
 		t, err := template.New(name).Funcs(funcs).ParseFS(templateFS,
 			"templates/layout.html", "templates/partials.html", "templates/"+name+".html")
 		if err != nil {
@@ -111,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /jobs/new", s.newJob)
 	mux.HandleFunc("POST /jobs/analyze", s.analyze)
 	mux.HandleFunc("POST /jobs/tailor", s.tailor)
+	mux.HandleFunc("GET /versions", s.versions)
 	mux.HandleFunc("POST /versions", s.createVersion)
 	mux.HandleFunc("GET /versions/{id}", s.showVersion)
 	mux.HandleFunc("GET /versions/{id}/preview", s.previewVersion)
@@ -173,12 +174,16 @@ type base struct {
 
 type homePage struct {
 	base
-	AIConfigured    bool
-	PDFReady        bool
-	PDFError        string
-	HasCV           bool
-	Name            string
-	CVError         string
+	AIConfigured bool
+	PDFReady     bool
+	PDFError     string
+	HasCV        bool
+	Name         string
+	CVError      string
+}
+
+type versionsPage struct {
+	base
 	Versions        []store.VersionSummary
 	VersionProblems []string
 }
@@ -310,12 +315,18 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	default:
 		data.CVError = err.Error()
 	}
+	s.page(w, http.StatusOK, "home", data)
+}
+
+// versions lista las versiones guardadas, una por oferta.
+func (s *Server) versions(w http.ResponseWriter, r *http.Request) {
+	data := versionsPage{base: base{Title: "Versiones"}}
 	versions, problems := s.store.ListVersions()
 	data.Versions = versions
 	for _, p := range problems {
 		data.VersionProblems = append(data.VersionProblems, p.Error())
 	}
-	s.page(w, http.StatusOK, "home", data)
+	s.page(w, http.StatusOK, "versions", data)
 }
 
 func (s *Server) importCV(w http.ResponseWriter, r *http.Request) {
@@ -567,8 +578,8 @@ func statusLabel(st string) string {
 // ---------- oferta, keywords y cambios ----------
 
 func (s *Server) newJob(w http.ResponseWriter, r *http.Request) {
-	_, err := s.store.LoadCV()
-	s.page(w, http.StatusOK, "job_new", jobPage{base: base{Title: "Nueva oferta"}, HasCV: err == nil})
+	// La oferta nueva se carga desde el inicio.
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // readJob lee y valida los datos de la oferta del formulario. Si devuelve un

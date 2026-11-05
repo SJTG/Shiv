@@ -24,7 +24,6 @@
     --canvas: #F4E3EA;      /* fondo general, como el lavanda de Deel */
     --panel:  #FCFAFB;      /* panel principal */
     --card:   #FFFFFF;
-    --well:   #F1ECEE;      /* bandeja gris de "accesos rápidos" */
     --ink:    #1E1A1C;
     --muted:  #6B6268;
     --line:   #ECE3E7;
@@ -67,16 +66,12 @@
   .nav a:hover { background: rgba(255, 255, 255, .55); color: var(--ink); }
   .nav a.active { background: var(--card); box-shadow: var(--shadow); }
   .nav a.active svg { color: var(--brand-500); }
-  .side-foot { margin-top: auto; background: rgba(255, 255, 255, .55); border-radius: 12px; padding: 12px 14px; font-size: .84rem; color: var(--muted); }
-  .side-foot strong { color: var(--brand-700); display: block; margin-bottom: 2px; }
 
   .top { display: flex; align-items: center; gap: 14px; padding: 0 28px; }
   .crumb { color: var(--muted); font-size: .9rem; margin-right: auto; display: flex; gap: 8px; align-items: center; }
   .crumb b { color: var(--ink); font-weight: 600; }
-  .top .btn { padding: 7px 14px; font-size: .9rem; }
 
   .panel { background: var(--panel); border-top-left-radius: 28px; padding: 36px 40px 72px; min-width: 0; }
-  .panel > .inner { max-width: 1080px; }
 
   /* ---------- tipografía ---------- */
   h1 { font-size: 2rem; line-height: 1.2; letter-spacing: -.02em; margin: 0 0 6px; font-weight: 700; }
@@ -140,30 +135,19 @@
   .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 16px 0; }
 
   /* ---------- home ---------- */
-  .home { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
-  .well { background: var(--well); border-radius: 18px; padding: 16px; }
-  .well-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: .92rem; margin: 2px 4px 14px; }
-  .well-title svg { width: 16px; height: 16px; color: var(--brand-500); }
-  .quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-  .quick > a, .quick > form > button {
-    all: unset; box-sizing: border-box; width: 100%; height: 100%; min-height: 112px; cursor: pointer;
-    background: var(--card); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; gap: 18px;
-    color: var(--ink); font-weight: 500; box-shadow: var(--shadow); transition: transform .15s, box-shadow .15s;
-  }
-  .quick > form { margin: 0; }
-  .quick > a:hover, .quick > form > button:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(61, 6, 32, .09); color: var(--ink); background: var(--card); }
-  .quick > a:focus-visible, .quick > form > button:focus-visible { box-shadow: var(--focus); }
-  .ico { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-100); color: var(--brand-700); }
-  .ico svg { width: 16px; height: 16px; }
-  .ico.alt { background: #FBE7C9; color: #7A4A00; }
-  .ico.alt2 { background: #DCE8FB; color: #1C4A8F; }
-  .side-col .card { margin: 0 0 16px; }
-  .side-col h3 { margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
-  .count { font-size: .78rem; background: var(--well); border-radius: 6px; padding: 1px 8px; color: var(--muted); font-weight: 600; }
-  .status-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); font-size: .9rem; }
-  .status-row:first-of-type { border-top: 0; padding-top: 0; }
-  .status-row .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; flex: none; }
-  .dot.ok { background: var(--ok); } .dot.warn { background: #D98A00; }
+  .home { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: stretch; margin-top: 22px; }
+  .home .card { margin: 0; }
+  .job-form { display: flex; flex-direction: column; }
+  .job-form h2, .side-col h2 { margin: 0 0 4px; }
+  .job-form fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .job-form fieldset:disabled { opacity: .55; }
+  .job-form textarea { flex: 1; min-height: max(320px, calc(100vh - 430px)); }
+  .job-form .actions { margin-bottom: 0; }
+  .side-col { display: flex; flex-direction: column; gap: 16px; }
+  .side-col .actions { margin: 12px 0 0; }
+  .side-col hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0 2px; }
+  .alerts { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+  .alerts p { margin: 0; }
   .empty { text-align: center; padding: 34px 20px; color: var(--muted); }
   .empty .logo-mark { width: 64px; margin: 0 auto 12px; color: var(--brand-200); }
 
@@ -182,8 +166,6 @@
     transform: skewX(-32deg); box-shadow: 0 0 14px 3px rgba(255, 255, 255, .75), 0 0 46px 10px rgba(255, 255, 255, .25);
     animation: blade .34s cubic-bezier(.86, 0, .14, 1) .2s forwards;
   }
-  .loader-bar { position: absolute; left: 0; right: 0; bottom: -42px; height: 2px; background: rgba(255, 255, 255, .22); border-radius: 2px; overflow: hidden; }
-  .loader-bar::after { content: ""; position: absolute; inset: 0; background: #fff; transform-origin: left; transform: scaleX(0); animation: bar 1.05s cubic-bezier(.6, 0, .2, 1) .1s forwards; }
   @keyframes logo-cut {
     to { clip-path: polygon(-30% 0, 130% 0, 105% 100%, -30% 100%); }
   }
@@ -192,7 +174,6 @@
     85%  { opacity: 1; }
     100% { left: 118%; opacity: 0; }
   }
-  @keyframes bar { to { transform: scaleX(1); } }
   @keyframes loader-out {
     from { clip-path: polygon(-30% 0, 130% 0, 130% 100%, -30% 100%); }
     to   { clip-path: polygon(130% 0, 130% 0, 130% 100%, 100% 100%); visibility: hidden; }
@@ -200,26 +181,24 @@
   @media (prefers-reduced-motion: reduce) {
     .loader { animation: fade-out .3s ease .5s forwards; }
     .loader-logo { animation: none; clip-path: none; }
-    .loader-blade, .loader-bar { display: none; }
+    .loader-blade { display: none; }
     @keyframes fade-out { to { opacity: 0; visibility: hidden; } }
   }
 
   /* ---------- responsive ---------- */
-  @media (max-width: 1100px) { .home { grid-template-columns: 1fr; } }
+  @media (max-width: 1000px) { .home { grid-template-columns: 1fr; } .job-form textarea { min-height: 320px; } }
   @media (max-width: 860px) {
     .shell { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
     .side { grid-row: auto; position: static; height: auto; flex-direction: row; align-items: center; padding: 14px 16px 8px; gap: 12px; overflow-x: auto; }
     .brand { width: 70px; margin: 0 6px 0 0; flex: none; }
     .nav { flex-direction: row; }
     .nav a { white-space: nowrap; padding: 7px 10px; }
-    .side-foot { display: none; }
     .top { padding: 0 16px 12px; }
     .panel { border-radius: 22px 22px 0 0; padding: 26px 16px 56px; }
     h1 { font-size: 1.6rem; }
   }
   @media (max-width: 640px) {
-    .grid2, .grid3, .quick { grid-template-columns: 1fr; }
-    .quick > a, .quick > form > button { min-height: 0; flex-direction: row; align-items: center; justify-content: flex-start; }
+    .grid2, .grid3 { grid-template-columns: 1fr; }
     .nav a span { display: none; }
     .nav a.active span { display: inline; }
     table { display: block; overflow-x: auto; }
@@ -231,7 +210,6 @@
   <div class="loader-stage">
     <span class="logo-mark loader-logo"></span>
     <span class="loader-blade"></span>
-    <span class="loader-bar"></span>
   </div>
 </div>
 
@@ -239,19 +217,17 @@
   <aside class="side">
     <a class="brand" href="/" aria-label="Shiv, ir al inicio"><span class="logo-mark"></span></a>
     <nav class="nav" aria-label="Principal">
-      <a href="/"{{if or (eq .Title "Inicio") (eq .Title "Versión")}} class="active" aria-current="page"{{end}}>
+      <a href="/"{{if or (eq .Title "Inicio") (eq .Title "Nueva oferta") (eq .Title "Keywords") (eq .Title "Cambios")}} class="active" aria-current="page"{{end}}>
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.2 2.8 11h2.7v9.3h5V14h3v6.3h5V11h2.7z"/></svg><span>Inicio</span></a>
       <a href="/cv"{{if eq .Title "CV maestro"}} class="active" aria-current="page"{{end}}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span>CV maestro</span></a>
-      <a href="/jobs/new"{{if or (eq .Title "Nueva oferta") (eq .Title "Keywords") (eq .Title "Cambios")}} class="active" aria-current="page"{{end}}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Nueva oferta</span></a>
+      <a href="/versions"{{if or (eq .Title "Versiones") (eq .Title "Versión")}} class="active" aria-current="page"{{end}}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg><span>Versiones</span></a>
     </nav>
-    <div class="side-foot"><strong>Sin inventar nada</strong>La IA propone, Go valida y vos decidís.</div>
   </aside>
 
   <div class="top">
     <div class="crumb"><span>Shiv</span><span aria-hidden="true">/</span><b>{{.Title}}</b></div>
-    {{if ne .Title "Nueva oferta"}}<a class="btn" href="/jobs/new"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nueva oferta</a>{{end}}
   </div>
 
   <main class="panel"><div class="inner">
