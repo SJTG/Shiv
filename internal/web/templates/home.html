@@ -1,55 +1,61 @@
 {{define "content"}}
-<h1>{{if and .HasCV (ne .Name "(sin nombre)")}}Hola, {{.Name}}{{else}}Hola{{end}}</h1>
+<h1>Hola, {{.Account.Username}}</h1>
+<p class="muted" style="margin:0">Pegá una oferta a la izquierda y mirá tu CV a la derecha. El puesto y la empresa se sacan del texto.</p>
 
-{{if or (not .AIConfigured) (not .PDFReady) .CVError}}
+{{if or (not .PDFReady) .CVError}}
 <div class="alerts">
-  {{if not .AIConfigured}}<p class="error">Falta ANTHROPIC_API_KEY: sin la clave no se pueden analizar ofertas ni importar PDFs.</p>{{end}}
   {{if not .PDFReady}}<p class="error">No se puede generar el PDF: {{.PDFError}}.</p>{{end}}
   {{if .CVError}}<p class="error">No se pudo leer el CV guardado: {{.CVError}}</p>{{end}}
 </div>
 {{end}}
 
-<div class="home">
-  <form class="card job-form" method="post" action="/jobs/analyze">
-    <h2>Nueva oferta</h2>
-    <p class="muted" style="margin:0 0 6px">Pegá el texto de la publicación para comparar sus keywords con tu CV.</p>
-    {{if not .HasCV}}<p class="error" style="margin:8px 0 4px">Primero necesitás un CV maestro: importalo o cargá el de ejemplo.</p>{{end}}
+<div class="home2">
+  <form class="card job-pane" method="post" action="/jobs/analyze" data-async data-loading="Analizando la oferta…">
+    <div class="pane-head">
+      <div><h2>Nueva oferta</h2><p class="muted">Pegá el texto completo de la publicación.</p></div>
+    </div>
+    {{if not .HasCV}}<p class="error" style="margin:0 0 10px">Primero necesitás un CV maestro: importalo o cargá el de ejemplo.</p>{{end}}
     <fieldset{{if not .HasCV}} disabled{{end}}>
-      <div class="grid2">
-        <div><label for="title">Puesto (opcional)</label><input id="title" type="text" name="title" maxlength="120"></div>
-        <div><label for="company">Empresa (opcional)</label><input id="company" type="text" name="company" maxlength="120"></div>
-      </div>
-      <label for="text">Texto de la oferta</label>
-      <textarea id="text" name="text" required></textarea>
+      <label for="text" class="sr-only" style="position:absolute;left:-9999px">Texto de la oferta</label>
+      <textarea id="text" name="text" required data-draft="oferta" placeholder="Ej.: Buscamos Backend Developer en Acme para…"></textarea>
       <div class="actions"><button type="submit">Analizar keywords</button></div>
     </fieldset>
   </form>
 
-  <aside class="side-col">
-    <div class="card">
-      <h2>CV maestro</h2>
+  <section class="card cv-pane" aria-label="Tu CV">
+    <div class="pane-head">
+      <div><h2>Tu CV</h2><p class="muted">{{if .HasCV}}{{.Name}}{{else}}Todavía no cargaste tu CV.{{end}}</p></div>
       {{if .HasCV}}
-      <p style="margin:4px 0 0"><strong>{{.Name}}</strong></p>
       <div class="actions">
         <a class="btn secondary" href="/cv">Editar</a>
-        <a class="btn secondary" href="/cv/preview">Vista previa</a>
-        <a class="btn secondary" href="/cv/pdf">PDF</a>
+        {{if .PDFReady}}<a class="btn secondary" href="/cv/pdf">PDF</a>{{end}}
       </div>
-      {{else}}
-      <p class="muted" style="margin:4px 0 0">Todavía no cargaste tu CV.</p>
       {{end}}
-
-      <hr>
-      <form method="post" action="/cv/import" enctype="multipart/form-data">
-        <label for="pdf">{{if .HasCV}}Reemplazar con otro PDF{{else}}Importar tu CV en PDF{{end}}</label>
-        <input id="pdf" type="file" name="pdf" accept="application/pdf,.pdf" required>
-        <div class="actions"><button type="submit">Importar PDF</button></div>
-        {{if .HasCV}}<p class="muted" style="margin:10px 0 0;font-size:.85rem">Antes de reemplazarlo se guarda una copia en cv.backup.json.</p>{{end}}
-      </form>
-      <form method="post" action="/cv/sample">
-        <div class="actions"><button class="secondary" type="submit">Cargar un CV de ejemplo</button></div>
-      </form>
     </div>
-  </aside>
+
+    {{if .HasCV}}
+    <div class="cv-viewport" data-fit-page="794">
+      <iframe class="cv-frame" sandbox src="/cv/preview" title="Vista previa de tu CV"></iframe>
+    </div>
+    {{else}}
+    <div class="cv-viewport cv-empty">
+      <div><span class="logo-mark" aria-hidden="true"></span>Importá tu CV en PDF y lo vas a ver acá.</div>
+    </div>
+    {{end}}
+
+    <div id="import-error"></div>
+    <div class="pane-foot">
+      {{if .Account.SupportsPDF}}
+      <form method="post" action="/cv/import" enctype="multipart/form-data" data-async data-loading="Leyendo tu CV…" data-error-in="#import-error">
+        <input id="pdf" type="file" name="pdf" accept="application/pdf,.pdf" required aria-label="{{if .HasCV}}Reemplazar con otro PDF{{else}}Importar tu CV en PDF{{end}}">
+        <button type="submit">{{if .HasCV}}Reemplazar{{else}}Importar PDF{{end}}</button>
+      </form>
+      {{else}}
+      <span class="muted" style="font-size:.85rem">{{.Account.ProviderLabel}} no lee PDFs: <a href="/cv">completá tu CV a mano</a>.</span>
+      {{end}}
+      <span class="sep"></span>
+      <form method="post" action="/cv/sample"><button class="secondary" type="submit">Cargar ejemplo</button></form>
+    </div>
+  </section>
 </div>
 {{end}}

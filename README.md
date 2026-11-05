@@ -2,8 +2,9 @@
 
 App web local, escrita en Go, que adapta tu CV a cada oferta laboral **sin inventar nada**.
 
+0. Entrás con un nombre de usuario temporal y **tu propia API key** (BYOK): Gemini, OpenAI, Anthropic o Groq.
 1. Importás tu CV en PDF una sola vez (la IA lo convierte en un JSON editable).
-2. Pegás el texto de una oferta: la IA saca las keywords y las compara con tu CV.
+2. Pegás el texto de una oferta: la IA saca el puesto, la empresa y las keywords, y las compara con tu CV.
 3. La IA propone intercambios puntuales de palabras (por ejemplo `Postgres` → `PostgreSQL`).
 4. Go valida cada propuesta, vos elegís cuáles aplicar y descargás el PDF en formato Harvard.
 
@@ -13,30 +14,40 @@ La IA propone, Go valida y vos decidís. **Cero dependencias externas**: solo la
 
 - Go 1.22 o superior.
 - Google Chrome o Chromium instalado (para imprimir el PDF).
-- Una API key de Anthropic (solo para las funciones de IA).
+- Una API key de alguno de los proveedores soportados (se carga desde la app, no por variable de entorno).
 
 ## Cómo correrla
 
 ```bash
-export ANTHROPIC_API_KEY=tu-clave
 go run ./cmd/server
 # abrí http://127.0.0.1:8080
 ```
 
-Sin clave la app arranca igual: podés probar todo con el botón **Cargar un CV de ejemplo** (datos inventados), y las pantallas de IA muestran un error claro.
+## Cuenta y API key (BYOK)
+
+Al entrar, la app pide un **nombre de usuario temporal** y tu **API key**. El proveedor se detecta por las primeras letras de la clave:
+
+| Prefijo | Proveedor | Importa PDF |
+| --- | --- | --- |
+| `AQ` (o `AIza`) | Gemini | sí |
+| `sk-ant-` | Anthropic | sí |
+| `sk-` | OpenAI | sí |
+| `gsk` | Groq | no: completá el CV a mano o cargá el ejemplo |
+
+La clave se **verifica** contra el proveedor listando sus modelos: si la rechaza, no se entra. Después elegís el modelo, que se puede cambiar en cualquier momento desde la barra superior. En **Cuenta** podés cambiar el nombre, pegar otra clave (incluso de otro proveedor) o cerrar sesión.
+
+La clave vive **solo en la memoria del servidor**: la cookie lleva un token al azar, nunca la clave. Se borra al cerrar sesión o al reiniciar la app (y hay que volver a entrar).
 
 | Variable | Para qué | Por defecto |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Clave de la API | (vacía) |
-| `ANTHROPIC_MODEL` | Modelo a usar | `claude-sonnet-5-5` |
-| `ANTHROPIC_BASE_URL` | URL base de la API (proxy o pruebas) | `https://api.anthropic.com` |
+| `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `GEMINI_BASE_URL`, `GROQ_BASE_URL` | URL base de cada API (proxy o pruebas) | la oficial |
 | `ADDR` / `PORT` | Dónde escucha | `127.0.0.1:8080` |
 | `DATA_DIR` | Dónde se guardan los JSON | `data` |
 | `CHROME_PATH` | Ruta a Chrome si no se autodetecta | autodetecta |
 | `CHROME_NO_SANDBOX` | `1` para pasar `--no-sandbox` (Docker). Como root se agrega solo | (vacío) |
 | `CV_LANG` | Idioma de los títulos del CV: `es` o `en` | `es` |
 
-La app **no tiene login** y usa tu clave: dejala escuchando solo en `127.0.0.1`. Rechaza además los POST que vengan de otros sitios.
+El usuario es temporal y **el CV maestro y las versiones son compartidos** entre sesiones: es una app personal, dejala escuchando solo en `127.0.0.1`. Rechaza además los POST que vengan de otros sitios.
 
 ## Qué se guarda
 
@@ -64,10 +75,10 @@ La regla de nombres propios es una heurística conservadora: ante la duda descar
 ```text
 cmd/server/         arranque y configuración por entorno
 internal/cv/        modelo del CV, IDs, validador y aplicador de cambios
-internal/ai/        interfaz Analyzer, cliente HTTP de Anthropic y prompts
+internal/ai/        interfaz Analyzer, detección de proveedor, clientes de Gemini/OpenAI/Anthropic/Groq y prompts
 internal/render/    plantilla Harvard (HTML) y PDF con Chrome headless
 internal/store/     lectura y escritura atómica de los JSON
-internal/web/       handlers, plantillas de pantalla y seguridad
+internal/web/       handlers, sesiones BYOK, plantillas de pantalla y seguridad
 ```
 
 ## Tests

@@ -4,7 +4,7 @@
 
 {{template "keywords" .Keywords}}
 
-<form method="post" action="/jobs/tailor">
+<form method="post" action="/jobs/tailor" data-async data-loading="Proponiendo cambios…">
   <input type="hidden" name="title" value="{{.Job.Title}}">
   <input type="hidden" name="company" value="{{.Job.Company}}">
   <input type="hidden" name="text" value="{{.Job.Text}}">

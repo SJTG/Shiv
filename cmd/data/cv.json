@@ -1,0 +1,101 @@
+{
+  "basics": {
+    "name": "Ada Ejemplo",
+    "email": "ada@example.com",
+    "phone": "+54 11 0000-0000",
+    "location": "Buenos Aires, Argentina",
+    "links": [
+      {
+        "label": "LinkedIn",
+        "url": "linkedin.com/in/ada-ejemplo"
+      },
+      {
+        "label": "GitHub",
+        "url": "github.com/ada-ejemplo"
+      }
+    ]
+  },
+  "summary": "Desarrolladora backend con experiencia construyendo APIs y herramientas internas. Me interesa el trabajo con datos y la automatización de procesos.",
+  "education": [
+    {
+      "id": "edu-1",
+      "institution": "Universidad Ejemplo",
+      "degree": "Licenciatura en Sistemas",
+      "period": "2021 - 2025",
+      "details": [
+        "Tesis sobre sistemas de recomendación"
+      ]
+    }
+  ],
+  "experience": [
+    {
+      "id": "exp-1",
+      "company": "Acme Software",
+      "role": "Desarrolladora Backend",
+      "period": "2023 - Actualidad",
+      "bullets": [
+        {
+          "id": "exp-1-b1",
+          "text": "Desarrollé servicios REST en Go para el procesamiento de pagos."
+        },
+        {
+          "id": "exp-1-b2",
+          "text": "Mejoré los tiempos de respuesta de las consultas a Postgres agregando índices."
+        },
+        {
+          "id": "exp-1-b3",
+          "text": "Coordiné las revisiones de código del equipo de tres personas."
+        }
+      ]
+    },
+    {
+      "id": "exp-2",
+      "company": "Tienda Demo",
+      "role": "Desarrolladora Junior",
+      "period": "2022 - 2023",
+      "bullets": [
+        {
+          "id": "exp-2-b1",
+          "text": "Mantuve la tienda online y corregí errores de producción."
+        },
+        {
+          "id": "exp-2-b2",
+          "text": "Automaticé reportes semanales con scripts en Python."
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj-1",
+      "name": "Gestor de gastos",
+      "bullets": [
+        {
+          "id": "proj-1-b1",
+          "text": "App web personal para registrar gastos, hecha con Go y SQLite."
+        }
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "skills-1",
+      "category": "Lenguajes",
+      "items": [
+        "Go",
+        "Python",
+        "SQL"
+      ]
+    },
+    {
+      "id": "skills-2",
+      "category": "Herramientas",
+      "items": [
+        "Git",
+        "Docker",
+        "Postgres"
+      ]
+    }
+  ],
+  "unparsed": []
+}

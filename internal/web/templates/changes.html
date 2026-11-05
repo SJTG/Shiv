@@ -3,7 +3,7 @@
 <p class="muted">{{if .Job.Title}}{{.Job.Title}}{{end}}{{if and .Job.Title .Job.Company}} · {{end}}{{if .Job.Company}}{{.Job.Company}}{{end}}</p>
 <p>Cada cambio ya pasó la validación: el texto original existe tal cual en tu CV y no se agregaron números ni nombres propios nuevos. Elegí cuáles aplicar.</p>
 
-<form method="post" action="/versions">
+<form method="post" action="/versions" data-async data-loading="Creando la versión…">
   <input type="hidden" name="title" value="{{.Job.Title}}">
   <input type="hidden" name="company" value="{{.Job.Company}}">
   <input type="hidden" name="text" value="{{.Job.Text}}">

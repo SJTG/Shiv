@@ -1,15 +1,11 @@
 {{define "content"}}
 <h1>Nueva oferta</h1>
-<p class="muted">Pegá el texto de la publicación. La IA saca las keywords y las compara con tu CV maestro; todavía no se cambia nada.</p>
+<p class="muted">Pegá el texto de la publicación. La IA saca el puesto, la empresa y las keywords, y las compara con tu CV maestro; todavía no se cambia nada.</p>
 {{if not .HasCV}}<p class="error">Primero necesitás un CV maestro. <a href="/">Importalo o cargá el de ejemplo</a>.</p>{{end}}
 {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
-<form class="card" method="post" action="/jobs/analyze">
-  <div class="grid2">
-    <div><label for="title">Puesto (opcional)</label><input id="title" type="text" name="title" value="{{.JobTitle}}" maxlength="120"></div>
-    <div><label for="company">Empresa (opcional)</label><input id="company" type="text" name="company" value="{{.Company}}" maxlength="120"></div>
-  </div>
+<form class="card" method="post" action="/jobs/analyze" data-async data-loading="Analizando la oferta…">
   <label for="text">Texto de la oferta</label>
-  <textarea id="text" name="text" rows="16" required>{{.Text}}</textarea>
+  <textarea id="text" name="text" rows="16" required data-draft="oferta">{{.Text}}</textarea>
   <div class="actions"><button type="submit">Analizar keywords</button></div>
 </form>
 {{end}}

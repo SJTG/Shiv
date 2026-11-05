@@ -1,0 +1,23 @@
+{{define "content"}}
+<form class="card" method="post" action="/login" autocomplete="off" data-async data-loading="Verificando tu clave…">
+  <h1>Entrá a Shiv</h1>
+  {{if .Error}}<p class="error" role="alert" style="margin:14px 0 4px">{{.Error}}</p>{{end}}
+
+  <label for="username">Nombre de usuario</label>
+  <input id="username" type="text" name="username" value="{{.Username}}" maxlength="40" required autofocus
+         autocomplete="nickname" placeholder="santino" data-typewriter='["santino"]'>
+
+  <label for="apikey" class="key-label">API key <span id="key-status" class="key-status" role="img"></span></label>
+  <input id="apikey" class="mono" type="text" name="apikey" required spellcheck="false" autocomplete="off"
+         autocapitalize="off" data-key-detect="key-status" data-models="model" placeholder="AQ.3124242132"
+         data-typewriter='["AQ.3124242132", "gsk_12312fA9xQ…", "sk-proj-8aK2mZ…", "sk-ant-api03-Xy7…"]'>
+
+  <div class="model-field" data-model-field data-hide-empty hidden>
+    <label for="model">Modelo <span class="prov" data-provider-label></span></label>
+    <select id="model" name="model" style="width:100%"></select>
+  </div>
+
+  <div class="actions" style="margin-top:22px"><button type="submit">Entrar</button></div>
+  <p class="fine">El usuario es temporal: dura lo que dura la sesión. La clave queda solo en la memoria de esta app local (nunca en una cookie ni en disco) y se borra al cerrar sesión o reiniciar el servidor.</p>
+</form>
+{{end}}

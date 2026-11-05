@@ -39,7 +39,7 @@ func run() error {
 	addr := env("ADDR", "127.0.0.1:"+env("PORT", "8080"))
 	if host, _, err := net.SplitHostPort(addr); err == nil {
 		if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			logger.Warn("la app no tiene login y usa tu clave de IA: no la expongas fuera de tu máquina", "addr", addr)
+			logger.Warn("las sesiones guardan API keys en memoria y el CV es compartido: no expongas la app fuera de tu máquina", "addr", addr)
 		}
 	}
 
@@ -54,13 +54,18 @@ func run() error {
 		return err
 	}
 
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
-	if apiKey == "" {
-		logger.Warn("falta ANTHROPIC_API_KEY: las funciones de IA van a fallar con un mensaje claro")
-	}
-	analyzer := ai.NewAnthropic(apiKey, os.Getenv("ANTHROPIC_MODEL"))
-	if base := os.Getenv("ANTHROPIC_BASE_URL"); base != "" {
-		analyzer.BaseURL = base
+	// BYOK: cada persona entra con su propia API key desde /login. Las URLs
+	// base se pueden cambiar para usar un proxy o un servidor de pruebas.
+	registry := ai.NewRegistry()
+	for p, envName := range map[ai.Provider]string{
+		ai.ProviderAnthropic: "ANTHROPIC_BASE_URL",
+		ai.ProviderOpenAI:    "OPENAI_BASE_URL",
+		ai.ProviderGemini:    "GEMINI_BASE_URL",
+		ai.ProviderGroq:      "GROQ_BASE_URL",
+	} {
+		if base := os.Getenv(envName); base != "" {
+			registry.BaseURLs[p] = base
+		}
 	}
 
 	var pdf render.PDFRenderer
@@ -73,7 +78,7 @@ func run() error {
 		logger.Info("Chrome detectado", "path", chrome.Path)
 	}
 
-	srv, err := web.New(st, analyzer, pdf, pdfErr, web.Options{Lang: lang, AIConfigured: apiKey != "", Logger: logger})
+	srv, err := web.New(st, registry, pdf, pdfErr, web.Options{Lang: lang, Logger: logger})
 	if err != nil {
 		return err
 	}

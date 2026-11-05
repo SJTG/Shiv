@@ -31,6 +31,9 @@
   li { margin: 0 0 1.5pt; padding-left: 1pt; }
   p { margin: 0 0 2pt; }
   .unparsed { margin-top: 4pt; }
+  /* En pantalla (vista previa) se ve como una hoja A4 con sus márgenes; al
+     imprimir el PDF mandan los márgenes de @page. */
+  @media screen { body { max-width: 210mm; margin: 0 auto; padding: 14mm 16mm; } }
 </style>
 </head>
 <body>

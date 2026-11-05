@@ -1,0 +1,31 @@
+{{define "content"}}
+<h1>Cuenta</h1>
+<p class="lead">Cambiá tu nombre de usuario, tu API key o el modelo. Si pegás una clave nueva se verifica antes de reemplazar la actual.</p>
+{{if .Error}}<p class="error" role="alert" style="margin:0 0 16px">{{.Error}}</p>{{end}}
+
+{{with .Account}}
+<form class="card" method="post" action="/account" autocomplete="off" style="max-width:640px" data-async data-loading="Guardando…">
+  <label for="username">Nombre de usuario</label>
+  <input id="username" type="text" name="username" value="{{.Username}}" maxlength="40" required>
+
+  <label for="apikey" class="key-label">API key <span id="key-status" class="key-status" role="img"></span></label>
+  <input id="apikey" class="mono" type="text" name="apikey" spellcheck="false" autocomplete="off" autocapitalize="off"
+         data-key-detect="key-status" data-models="model" placeholder="Dejala vacía para seguir usando {{.MaskedKey}}">
+  <p class="hint">Clave actual: {{.ProviderLabel}} · {{.MaskedKey}}</p>
+
+  <div data-model-field>
+    <label for="model">Modelo <span class="prov" data-provider-label>{{.ProviderLabel}}</span></label>
+    <select id="model" name="model" style="width:100%">
+      {{range .Models}}<option value="{{.}}"{{if eq . $.Account.Model}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </div>
+  <p class="hint">Si cambiás a una clave de otro proveedor, se elige su modelo recomendado y después lo podés cambiar.</p>
+
+  <div class="actions" style="margin-bottom:0"><button type="submit">Guardar cambios</button></div>
+</form>
+
+<form method="post" action="/logout" style="max-width:640px">
+  <div class="actions"><button class="secondary" type="submit">Cerrar sesión y borrar la clave</button></div>
+</form>
+{{end}}
+{{end}}

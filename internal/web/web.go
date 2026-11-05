@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -48,24 +49,24 @@ const (
 // Options configura el servidor web.
 type Options struct {
 	Lang           string       // "es" o "en": idioma de los títulos del CV
-	AIConfigured   bool         // solo para mostrar el estado en el inicio
 	MaxUploadBytes int64        // 0 usa 20 MiB
 	Logger         *slog.Logger // nil usa slog.Default()
 }
 
 // Server agrupa las dependencias de los handlers.
 type Server struct {
-	store  *store.Store
-	ai     ai.Analyzer
-	pdf    render.PDFRenderer
-	pdfErr error
-	opts   Options
-	pages  map[string]*template.Template
+	store    *store.Store
+	ai       AIProvider
+	sessions *sessionStore
+	pdf      render.PDFRenderer
+	pdfErr   error
+	opts     Options
+	pages    map[string]*template.Template
 }
 
 // New arma el servidor. pdf puede ser nil si no hay Chrome; en ese caso pdfErr
 // explica por qué y las pantallas siguen funcionando sin la descarga del PDF.
-func New(st *store.Store, an ai.Analyzer, pdf render.PDFRenderer, pdfErr error, opts Options) (*Server, error) {
+func New(st *store.Store, an AIProvider, pdf render.PDFRenderer, pdfErr error, opts Options) (*Server, error) {
 	if pdf == nil && pdfErr == nil {
 		pdfErr = render.ErrNoChrome
 	}
@@ -75,7 +76,7 @@ func New(st *store.Store, an ai.Analyzer, pdf render.PDFRenderer, pdfErr error, 
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
-	s := &Server{store: st, ai: an, pdf: pdf, pdfErr: pdfErr, opts: opts, pages: map[string]*template.Template{}}
+	s := &Server{store: st, ai: an, sessions: newSessionStore(), pdf: pdf, pdfErr: pdfErr, opts: opts, pages: map[string]*template.Template{}}
 	funcs := template.FuncMap{
 		"lines":       func(ss []string) string { return strings.Join(ss, "\n") },
 		"commas":      func(ss []string) string { return strings.Join(ss, ", ") },
@@ -86,8 +87,14 @@ func New(st *store.Store, an ai.Analyzer, pdf render.PDFRenderer, pdfErr error, 
 		},
 		"fmtTime":     func(t time.Time) string { return t.Local().Format("02/01/2006 15:04") },
 		"statusLabel": statusLabel,
+		"initial": func(s string) string {
+			for _, r := range s {
+				return string(r)
+			}
+			return "?"
+		},
 	}
-	for _, name := range []string{"home", "versions", "cv", "job_new", "analysis", "changes", "version", "error"} {
+	for _, name := range []string{"home", "versions", "cv", "job_new", "analysis", "changes", "version", "error", "login", "account"} {
 		t, err := template.New(name).Funcs(funcs).ParseFS(templateFS,
 			"templates/layout.html", "templates/partials.html", "templates/"+name+".html")
 		if err != nil {
@@ -100,7 +107,20 @@ func New(st *store.Store, an ai.Analyzer, pdf render.PDFRenderer, pdfErr error, 
 
 // Handler devuelve el http.Handler con todas las rutas.
 func (s *Server) Handler() http.Handler {
+	// Rutas públicas: el ingreso y los archivos estáticos.
+	pub := http.NewServeMux()
+	pub.HandleFunc("GET /login", s.loginForm)
+	pub.HandleFunc("POST /login", s.login)
+	pub.HandleFunc("POST /login/verify", s.verifyKey)
+	pub.Handle("GET /static/", http.FileServerFS(staticFS))
+
+	// Todo lo demás necesita una sesión con API key.
 	mux := http.NewServeMux()
+	pub.Handle("/", s.requireAccount(mux))
+	mux.HandleFunc("GET /account", s.account)
+	mux.HandleFunc("POST /account", s.saveAccount)
+	mux.HandleFunc("POST /account/model", s.setModel)
+	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("POST /cv/import", s.importCV)
 	mux.HandleFunc("POST /cv/sample", s.loadSample)
@@ -116,11 +136,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /versions/{id}", s.showVersion)
 	mux.HandleFunc("GET /versions/{id}/preview", s.previewVersion)
 	mux.HandleFunc("GET /versions/{id}/pdf", s.pdfVersion)
-	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusNotFound, "No encontrado", "Esa dirección no existe en la app.", nil)
 	})
-	return s.secure(mux)
+	return s.secure(pub)
 }
 
 // secure agrega cabeceras de seguridad y rechaza POST que vengan de otro sitio:
@@ -129,9 +148,11 @@ func (s *Server) secure(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Referrer-Policy", "same-origin")
 		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'; form-action 'self'; base-uri 'none'")
 		if r.Method == http.MethodPost && !sameOrigin(r) {
+			s.opts.Logger.Warn("POST de otro origen bloqueado", "path", r.URL.Path,
+				"origin", r.Header.Get("Origin"), "host", r.Host, "sec-fetch-site", r.Header.Get("Sec-Fetch-Site"))
 			s.fail(w, r, http.StatusForbidden, "Pedido bloqueado",
 				"El pedido vino de otro origen. Abrí la app directamente en tu navegador y reintentá.", nil)
 			return
@@ -144,8 +165,14 @@ func (s *Server) secure(next http.Handler) http.Handler {
 }
 
 func sameOrigin(r *http.Request) bool {
-	if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
-		return false
+	// Los navegadores modernos mandan Sec-Fetch-Site y no se puede falsificar
+	// desde una página. Es la señal más confiable: Chrome a veces manda
+	// "Origin: null" en formularios del mismo sitio.
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "same-origin", "none":
+		return true
+	case "cross-site", "same-site":
+		return false // same-site: otra app en otro puerto de localhost
 	}
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -168,18 +195,19 @@ func (w *statusWriter) WriteHeader(code int) {
 // ---------- vistas ----------
 
 type base struct {
-	Title string
-	Flash string
+	Title   string
+	Flash   string
+	Account *Account // la sesión actual; lo completa page()
+	Next    string   // a dónde volver después de cambiar el modelo
 }
 
 type homePage struct {
 	base
-	AIConfigured bool
-	PDFReady     bool
-	PDFError     string
-	HasCV        bool
-	Name         string
-	CVError      string
+	PDFReady bool
+	PDFError string
+	HasCV    bool
+	Name     string
+	CVError  string
 }
 
 type versionsPage struct {
@@ -196,11 +224,9 @@ type cvPage struct {
 
 type jobPage struct {
 	base
-	HasCV    bool
-	JobTitle string
-	Company  string
-	Text     string
-	Error    string
+	HasCV bool
+	Text  string
+	Error string
 }
 
 type analysisPage struct {
@@ -240,14 +266,42 @@ type errorPage struct {
 	Detail  string
 }
 
-func (s *Server) page(w http.ResponseWriter, status int, name string, data any) {
+func (s *Server) page(w http.ResponseWriter, r *http.Request, status int, name string, data any) {
+	// Un formulario async que vuelve con un error de validación recibe solo
+	// el mensaje: la página del navegador no se reemplaza.
+	if isAsync(r) && status >= 400 {
+		if msg := errorField(data); msg != "" {
+			writeJSON(w, status, asyncError{Status: status, Heading: "Revisá los datos", Message: msg})
+			return
+		}
+	}
 	t, ok := s.pages[name]
 	if !ok {
 		http.Error(w, "plantilla desconocida", http.StatusInternalServerError)
 		return
 	}
+	// Todas las páginas embeben base: se le agrega la sesión para la barra
+	// superior sin tener que pasarla a mano en cada handler.
+	v := reflect.New(reflect.TypeOf(data))
+	v.Elem().Set(reflect.ValueOf(data))
+	if f := v.Elem().FieldByName("Account"); f.IsValid() && f.CanSet() {
+		if _, acc := session(r); acc != nil {
+			f.Set(reflect.ValueOf(acc))
+		}
+	}
+	if f := v.Elem().FieldByName("Next"); f.IsValid() && f.CanSet() {
+		next := "/"
+		if r.Method == http.MethodGet {
+			next = r.URL.RequestURI()
+		}
+		f.SetString(next)
+	}
+	layout := "layout"
+	if name == "login" {
+		layout = "bare"
+	}
 	var buf bytes.Buffer
-	if err := t.ExecuteTemplate(&buf, "layout", data); err != nil {
+	if err := t.ExecuteTemplate(&buf, layout, v.Interface()); err != nil {
 		s.opts.Logger.Error("renderizar página", "page", name, "err", err)
 		http.Error(w, "error interno al armar la página", http.StatusInternalServerError)
 		return
@@ -266,14 +320,20 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, status int, headin
 			data.Detail = err.Error()
 		}
 	}
-	s.page(w, status, "error", data)
+	if isAsync(r) {
+		writeJSON(w, status, asyncError{Status: status, Heading: heading, Message: msg, Detail: data.Detail, Action: actionFor(err)})
+		return
+	}
+	s.page(w, r, status, "error", data)
 }
 
 func (s *Server) failAI(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ai.ErrNoAPIKey):
-		s.fail(w, r, http.StatusServiceUnavailable, "La IA no está configurada",
-			"Falta la variable de entorno ANTHROPIC_API_KEY. Definila y reiniciá la app.", err)
+		s.fail(w, r, http.StatusServiceUnavailable, "Falta tu API key",
+			"Tu sesión no tiene una API key. Cargala desde Cuenta.", err)
+	case errors.Is(err, ai.ErrPDFUnsupported):
+		s.fail(w, r, http.StatusUnprocessableEntity, "Tu proveedor no puede leer PDFs", err.Error(), err)
 	case errors.Is(err, context.DeadlineExceeded):
 		s.fail(w, r, http.StatusGatewayTimeout, "La IA tardó demasiado", "La IA no respondió a tiempo. Reintentá en un momento.", err)
 	case errors.Is(err, context.Canceled):
@@ -281,6 +341,15 @@ func (s *Server) failAI(w http.ResponseWriter, r *http.Request, err error) {
 	default:
 		s.fail(w, r, http.StatusBadGateway, "La IA no pudo completar el pedido", err.Error(), err)
 	}
+}
+
+// analyzer arma el cliente de IA con la clave y el modelo de la sesión.
+func (s *Server) analyzer(r *http.Request) ai.Analyzer {
+	_, acc := session(r)
+	if acc == nil {
+		return s.ai.Analyzer("", "", "")
+	}
+	return s.ai.Analyzer(acc.Provider, acc.APIKey, acc.Model)
 }
 
 func (s *Server) loadMaster(w http.ResponseWriter, r *http.Request) (*cv.CV, bool) {
@@ -300,7 +369,7 @@ func (s *Server) loadMaster(w http.ResponseWriter, r *http.Request) (*cv.CV, boo
 // ---------- inicio y CV maestro ----------
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
-	data := homePage{base: base{Title: "Inicio"}, AIConfigured: s.opts.AIConfigured, PDFReady: s.pdf != nil}
+	data := homePage{base: base{Title: "Inicio"}, PDFReady: s.pdf != nil}
 	if s.pdf == nil {
 		data.PDFError = s.pdfErr.Error()
 	}
@@ -315,7 +384,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	default:
 		data.CVError = err.Error()
 	}
-	s.page(w, http.StatusOK, "home", data)
+	s.page(w, r, http.StatusOK, "home", data)
 }
 
 // versions lista las versiones guardadas, una por oferta.
@@ -326,7 +395,7 @@ func (s *Server) versions(w http.ResponseWriter, r *http.Request) {
 	for _, p := range problems {
 		data.VersionProblems = append(data.VersionProblems, p.Error())
 	}
-	s.page(w, http.StatusOK, "versions", data)
+	s.page(w, r, http.StatusOK, "versions", data)
 }
 
 func (s *Server) importCV(w http.ResponseWriter, r *http.Request) {
@@ -366,7 +435,7 @@ func (s *Server) importCV(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), aiTimeout)
 	defer cancel()
-	c, err := s.ai.ParseCV(ctx, data)
+	c, err := s.analyzer(r).ParseCV(ctx, data)
 	if err != nil {
 		s.failAI(w, r, err)
 		return
@@ -416,7 +485,7 @@ func (s *Server) editCV(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Query().Get("saved") == "1":
 		data.Flash = "Cambios guardados."
 	}
-	s.page(w, http.StatusOK, "cv", data)
+	s.page(w, r, http.StatusOK, "cv", data)
 }
 
 func (s *Server) saveCV(w http.ResponseWriter, r *http.Request) {
@@ -427,7 +496,7 @@ func (s *Server) saveCV(w http.ResponseWriter, r *http.Request) {
 	}
 	c := parseCVForm(r.PostForm)
 	if err := c.Prepare(); err != nil {
-		s.page(w, http.StatusBadRequest, "cv", cvPage{
+		s.page(w, r, http.StatusBadRequest, "cv", cvPage{
 			base:  base{Title: "CV maestro"},
 			CV:    padded(c),
 			Error: "No se guardó: el CV está vacío. Completá al menos un dato.",
@@ -617,8 +686,8 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if msg != "" {
-		s.page(w, http.StatusBadRequest, "job_new", jobPage{
-			base: base{Title: "Nueva oferta"}, HasCV: true, JobTitle: job.Title, Company: job.Company, Text: job.Text, Error: msg,
+		s.page(w, r, http.StatusBadRequest, "job_new", jobPage{
+			base: base{Title: "Nueva oferta"}, HasCV: true, Text: job.Text, Error: msg,
 		})
 		return
 	}
@@ -628,19 +697,22 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), aiTimeout)
 	defer cancel()
-	keywords, err := s.ai.ExtractKeywords(ctx, job.Text, master)
+	res, err := s.analyzer(r).AnalyzeJob(ctx, job.Text, master)
 	if err != nil {
 		s.failAI(w, r, err)
 		return
 	}
-	keywords = sortedKeywords(keywords)
+	// El puesto y la empresa salen del texto de la oferta.
+	job.Title = truncateRunes(strings.TrimSpace(res.Title), maxFieldRunes)
+	job.Company = truncateRunes(strings.TrimSpace(res.Company), maxFieldRunes)
+	keywords := sortedKeywords(res.Keywords)
 	replaceable := false
 	for _, k := range keywords {
 		if k.Status == cv.StatusReplaceable {
 			replaceable = true
 		}
 	}
-	s.page(w, http.StatusOK, "analysis", analysisPage{
+	s.page(w, r, http.StatusOK, "analysis", analysisPage{
 		base: base{Title: "Keywords"}, Job: job, Keywords: keywords, HasReplaceable: replaceable,
 	})
 }
@@ -673,7 +745,7 @@ func (s *Server) tailor(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), aiTimeout)
 	defer cancel()
-	proposals, err := s.ai.ProposeChanges(ctx, job.Text, master, keywords)
+	proposals, err := s.analyzer(r).ProposeChanges(ctx, job.Text, master, keywords)
 	if err != nil {
 		s.failAI(w, r, err)
 		return
@@ -683,7 +755,7 @@ func (s *Server) tailor(w http.ResponseWriter, r *http.Request) {
 	for i, ch := range valid {
 		views[i] = changeView{Index: i, Change: ch, Context: master.TargetText(ch.TargetID)}
 	}
-	s.page(w, http.StatusOK, "changes", changesPage{
+	s.page(w, r, http.StatusOK, "changes", changesPage{
 		base: base{Title: "Cambios"}, Job: job, Keywords: keywords, Valid: valid, Changes: views, Dropped: dropped,
 	})
 }
@@ -809,7 +881,7 @@ func (s *Server) showVersion(w http.ResponseWriter, r *http.Request) {
 	if n, _ := strconv.Atoi(r.URL.Query().Get("skipped")); n > 0 {
 		data.SkippedNote = fmt.Sprintf("Se omitieron %d cambio(s) porque se pisaban con otro sobre el mismo texto.", n)
 	}
-	s.page(w, http.StatusOK, "version", data)
+	s.page(w, r, http.StatusOK, "version", data)
 }
 
 func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {

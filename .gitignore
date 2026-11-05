@@ -9,6 +9,7 @@
 
 # Secretos y archivos locales
 .env
+config.js
 .env.*
 /Claude outputs/
 /.claude/

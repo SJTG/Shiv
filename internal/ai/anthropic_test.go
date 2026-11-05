@@ -137,15 +137,19 @@ func TestParseCVEmptyResultIsRetriedThenFails(t *testing.T) {
 	}
 }
 
-func TestExtractKeywordsRetriesOnInvalidStatus(t *testing.T) {
+func TestAnalyzeJobRetriesOnInvalidStatus(t *testing.T) {
 	bad := `{"keywords":[{"term":"Go","status":"quizás"}]}`
-	good := `{"keywords":[{"term":" Go ","status":"present"},{"term":"go","status":"present"},{"term":"CI/CD","status":"replaceable"},{"term":"","status":"missing"},{"term":"Kafka","status":"missing"}]}`
+	good := `{"title":"  Backend   Dev ","company":"Acme","keywords":[{"term":" Go ","status":"present"},{"term":"go","status":"present"},{"term":"CI/CD","status":"replaceable"},{"term":"","status":"missing"},{"term":"Kafka","status":"missing"}]}`
 	a, f := newClient(t, textReply(bad), textReply(good))
 	cvv := cv.Sample()
-	got, err := a.ExtractKeywords(context.Background(), "Buscamos gente con Go, CI/CD y Kafka", cvv)
+	res, err := a.AnalyzeJob(context.Background(), "Buscamos gente con Go, CI/CD y Kafka", cvv)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if res.Title != "Backend Dev" || res.Company != "Acme" {
+		t.Fatalf("puesto/empresa = %q / %q", res.Title, res.Company)
+	}
+	got := res.Keywords
 	if len(f.requests) != 2 {
 		t.Fatalf("llamadas = %d", len(f.requests))
 	}
@@ -209,9 +213,9 @@ func TestAPIErrorsAreExplained(t *testing.T) {
 		body   string
 		want   string
 	}{
-		{401, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`, "ANTHROPIC_API_KEY"},
+		{401, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`, "revisá tu API key"},
 		{429, `{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}`, "límite de uso"},
-		{404, `{"type":"error","error":{"type":"not_found_error","message":"model: x"}}`, "ANTHROPIC_MODEL"},
+		{404, `{"type":"error","error":{"type":"not_found_error","message":"model: x"}}`, "revisá el modelo"},
 		{529, `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`, "sobrecargada"},
 		{400, `{"type":"error","error":{"type":"invalid_request_error","message":"pdf demasiado grande"}}`, "pdf demasiado grande"},
 	}

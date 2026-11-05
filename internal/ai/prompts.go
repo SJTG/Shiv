@@ -30,8 +30,9 @@ Reglas:
 
 const systemKeywords = `Analizás una oferta laboral contra un CV. Devolvés SOLO un objeto JSON (sin texto antes ni después y sin bloques de código) con esta forma exacta:
 
-{"keywords": [{"term": "", "status": ""}]}
+{"title": "", "company": "", "keywords": [{"term": "", "status": ""}]}
 
+0. "title" es el nombre del puesto y "company" el de la empresa que publica la oferta, tal como aparecen en el texto. Si alguno no figura, dejalo vacío; no lo inventes.
 1. Extraé las keywords relevantes de la oferta: tecnologías, herramientas, metodologías, habilidades y responsabilidades clave. Usá cada término tal como aparece en la oferta. Como máximo 25, sin repetidas.
 2. Clasificá cada una contra el CV con uno de estos estados:
    - "present": el CV ya usa ese término o uno idéntico.
