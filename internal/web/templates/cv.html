@@ -1,0 +1,85 @@
+{{define "content"}}
+<h1>CV maestro</h1>
+<p class="muted">Revisá lo que leyó la IA. Para borrar una entrada, vaciá sus campos; las filas en blanco del final sirven para agregar nuevas. Un bullet por línea.</p>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+{{if .CV.Unparsed}}
+<div class="card" style="border-color:#ecd2a6">
+  <strong>Texto que la IA no supo ubicar</strong>
+  <p class="muted">Pasalo a donde corresponda y vaciá esta caja cuando termines.</p>
+  <textarea name="unparsed" form="cvform" rows="5">{{lines .CV.Unparsed}}</textarea>
+</div>
+{{end}}
+
+<form id="cvform" method="post" action="/cv">
+  <h2>Datos personales</h2>
+  <div class="card">
+    <div class="grid2">
+      <div><label for="name">Nombre</label><input id="name" type="text" name="basics.name" value="{{.CV.Basics.Name}}"></div>
+      <div><label for="loc">Ubicación</label><input id="loc" type="text" name="basics.location" value="{{.CV.Basics.Location}}"></div>
+      <div><label for="email">Email</label><input id="email" type="text" name="basics.email" value="{{.CV.Basics.Email}}"></div>
+      <div><label for="phone">Teléfono</label><input id="phone" type="text" name="basics.phone" value="{{.CV.Basics.Phone}}"></div>
+    </div>
+    {{range $i, $l := .CV.Basics.Links}}
+    <div class="grid2">
+      <div><label>Enlace (nombre)</label><input type="text" name="link.{{$i}}.label" value="{{$l.Label}}"></div>
+      <div><label>Enlace (URL)</label><input type="text" name="link.{{$i}}.url" value="{{$l.URL}}"></div>
+    </div>
+    {{end}}
+  </div>
+
+  <h2>Resumen</h2>
+  <div class="card"><textarea name="summary" rows="3">{{.CV.Summary}}</textarea></div>
+
+  <h2>Educación</h2>
+  {{range $i, $e := .CV.Education}}
+  <div class="card">
+    <div class="grid3">
+      <div><label>Institución</label><input type="text" name="edu.{{$i}}.institution" value="{{$e.Institution}}"></div>
+      <div><label>Título</label><input type="text" name="edu.{{$i}}.degree" value="{{$e.Degree}}"></div>
+      <div><label>Período</label><input type="text" name="edu.{{$i}}.period" value="{{$e.Period}}"></div>
+    </div>
+    <label>Detalles (uno por línea)</label>
+    <textarea name="edu.{{$i}}.details" rows="2">{{lines $e.Details}}</textarea>
+  </div>
+  {{end}}
+
+  <h2>Experiencia</h2>
+  {{range $i, $e := .CV.Experience}}
+  <div class="card">
+    <div class="grid3">
+      <div><label>Empresa</label><input type="text" name="exp.{{$i}}.company" value="{{$e.Company}}"></div>
+      <div><label>Puesto</label><input type="text" name="exp.{{$i}}.role" value="{{$e.Role}}"></div>
+      <div><label>Período</label><input type="text" name="exp.{{$i}}.period" value="{{$e.Period}}"></div>
+    </div>
+    <label>Bullets (uno por línea)</label>
+    <textarea name="exp.{{$i}}.bullets" rows="4">{{bulletLines $e.Bullets}}</textarea>
+  </div>
+  {{end}}
+
+  <h2>Proyectos</h2>
+  {{range $i, $p := .CV.Projects}}
+  <div class="card">
+    <label>Nombre</label><input type="text" name="proj.{{$i}}.name" value="{{$p.Name}}">
+    <label>Bullets (uno por línea)</label>
+    <textarea name="proj.{{$i}}.bullets" rows="3">{{bulletLines $p.Bullets}}</textarea>
+  </div>
+  {{end}}
+
+  <h2>Habilidades</h2>
+  {{range $i, $s := .CV.Skills}}
+  <div class="card">
+    <div class="grid2">
+      <div><label>Categoría</label><input type="text" name="skill.{{$i}}.category" value="{{$s.Category}}"></div>
+      <div><label>Items (separados por coma)</label><input type="text" name="skill.{{$i}}.items" value="{{commas $s.Items}}"></div>
+    </div>
+  </div>
+  {{end}}
+
+  <div class="actions">
+    <button type="submit">Guardar CV</button>
+    <a class="btn secondary" href="/cv/preview">Vista previa</a>
+    <a class="btn secondary" href="/cv/pdf">Descargar PDF</a>
+  </div>
+</form>
+{{end}}

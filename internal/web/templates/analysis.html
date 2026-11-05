@@ -1,0 +1,18 @@
+{{define "content"}}
+<h1>Keywords de la oferta</h1>
+<p class="muted">{{if .Job.Title}}{{.Job.Title}}{{end}}{{if and .Job.Title .Job.Company}} · {{end}}{{if .Job.Company}}{{.Job.Company}}{{end}}</p>
+
+{{template "keywords" .Keywords}}
+
+<form method="post" action="/jobs/tailor">
+  <input type="hidden" name="title" value="{{.Job.Title}}">
+  <input type="hidden" name="company" value="{{.Job.Company}}">
+  <input type="hidden" name="text" value="{{.Job.Text}}">
+  <input type="hidden" name="keywords" value="{{toJSON .Keywords}}">
+  <div class="actions">
+    <button type="submit">Proponer cambios</button>
+    <a class="btn secondary" href="/jobs/new">Volver</a>
+  </div>
+  {{if not .HasReplaceable}}<p class="muted">Ninguna keyword es reemplazable por sinónimo: no hay nada para cambiar. Igual podés continuar y generar una versión con tu CV tal como está.</p>{{end}}
+</form>
+{{end}}

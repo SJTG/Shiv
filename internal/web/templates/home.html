@@ -1,0 +1,99 @@
+{{define "content"}}
+<h1>{{if and .HasCV (ne .Name "(sin nombre)")}}Hola, {{.Name}} 👋{{else}}Hola 👋{{end}}</h1>
+<p class="lead">Adaptá tu CV a cada oferta sin inventar nada: la IA propone, Go valida y vos decidís.</p>
+
+<div class="home">
+  <div>
+    <section class="well" aria-labelledby="qa-title">
+      <div class="well-title" id="qa-title"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Accesos rápidos</div>
+      <div class="quick">
+        <a href="/jobs/new">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
+          Adaptar a una oferta
+        </a>
+        <a href="#importar">
+          <span class="ico alt2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg></span>
+          Importar CV en PDF
+        </a>
+        {{if .HasCV}}
+        <a href="/cv">
+          <span class="ico alt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+          Editar CV maestro
+        </a>
+        {{else}}
+        <form method="post" action="/cv/sample">
+          <button type="submit">
+            <span class="ico alt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>
+            Probar con un CV de ejemplo
+          </button>
+        </form>
+        {{end}}
+      </div>
+    </section>
+
+    <h2>Versiones guardadas</h2>
+    {{if .VersionProblems}}<p class="error">Hay archivos de versiones que no se pudieron leer:{{range .VersionProblems}}<br>{{.}}{{end}}</p>{{end}}
+    {{if .Versions}}
+    <table>
+      <tr><th>Fecha</th><th>Puesto</th><th>Empresa</th><th></th></tr>
+      {{range .Versions}}
+      <tr>
+        <td class="muted">{{fmtTime .CreatedAt}}</td>
+        <td><strong>{{if .Title}}{{.Title}}{{else}}<span class="muted">sin puesto</span>{{end}}</strong></td>
+        <td>{{if .Company}}{{.Company}}{{else}}<span class="muted">sin empresa</span>{{end}}</td>
+        <td style="text-align:right;white-space:nowrap"><a href="/versions/{{.ID}}">abrir</a> · <a href="/versions/{{.ID}}/pdf">PDF</a></td>
+      </tr>
+      {{end}}
+    </table>
+    {{else}}
+    <div class="card empty">
+      <span class="logo-mark" aria-hidden="true"></span>
+      Todavía no generaste ninguna versión.<br>
+      <a href="/jobs/new">Adaptá tu CV a tu primera oferta</a>
+    </div>
+    {{end}}
+
+    <h2 id="importar">Importar CV</h2>
+    <form class="card" method="post" action="/cv/import" enctype="multipart/form-data">
+      <label for="pdf">PDF de tu CV · la IA lo convierte en un CV editable</label>
+      <input id="pdf" type="file" name="pdf" accept="application/pdf,.pdf" required>
+      <div class="actions"><button type="submit">Importar PDF</button></div>
+      {{if .HasCV}}<p class="muted" style="margin:0">Importar reemplaza el CV maestro actual; antes se guarda una copia en cv.backup.json.</p>{{end}}
+    </form>
+    {{if .HasCV}}
+    <form method="post" action="/cv/sample">
+      <button class="secondary" type="submit">Cargar un CV de ejemplo (sin IA)</button>
+    </form>
+    {{end}}
+  </div>
+
+  <aside class="side-col">
+    <div class="card">
+      <h3>Tu CV maestro</h3>
+      {{if .CVError}}<p class="error">No se pudo leer el CV guardado: {{.CVError}}</p>{{end}}
+      {{if .HasCV}}
+      <p style="margin:0 0 12px"><strong>{{.Name}}</strong></p>
+      <div class="actions" style="margin:0">
+        <a class="btn secondary" href="/cv">Editar</a>
+        <a class="btn secondary" href="/cv/preview">Vista previa</a>
+        <a class="btn secondary" href="/cv/pdf">PDF</a>
+      </div>
+      {{else}}
+      <p class="muted" style="margin:0">Todavía no cargaste tu CV. Importá un PDF o probá con el de ejemplo.</p>
+      {{end}}
+    </div>
+
+    <div class="card">
+      <h3>Estado <span class="count">2</span></h3>
+      <div class="status-row">
+        <span class="dot {{if .AIConfigured}}ok{{else}}warn{{end}}"></span>
+        <div><strong>IA</strong><br><span class="muted">{{if .AIConfigured}}clave configurada{{else}}falta ANTHROPIC_API_KEY{{end}}</span></div>
+      </div>
+      <div class="status-row">
+        <span class="dot {{if .PDFReady}}ok{{else}}warn{{end}}"></span>
+        <div><strong>PDF</strong><br><span class="muted">{{if .PDFReady}}Chrome detectado{{else}}{{.PDFError}}{{end}}</span></div>
+      </div>
+    </div>
+  </aside>
+</div>
+{{end}}

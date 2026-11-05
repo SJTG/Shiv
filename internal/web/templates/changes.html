@@ -1,0 +1,51 @@
+{{define "content"}}
+<h1>Cambios propuestos</h1>
+<p class="muted">{{if .Job.Title}}{{.Job.Title}}{{end}}{{if and .Job.Title .Job.Company}} · {{end}}{{if .Job.Company}}{{.Job.Company}}{{end}}</p>
+<p>Cada cambio ya pasó la validación: el texto original existe tal cual en tu CV y no se agregaron números ni nombres propios nuevos. Elegí cuáles aplicar.</p>
+
+<form method="post" action="/versions">
+  <input type="hidden" name="title" value="{{.Job.Title}}">
+  <input type="hidden" name="company" value="{{.Job.Company}}">
+  <input type="hidden" name="text" value="{{.Job.Text}}">
+  <input type="hidden" name="keywords" value="{{toJSON .Keywords}}">
+  <input type="hidden" name="changes" value="{{toJSON .Valid}}">
+
+  {{if .Changes}}
+  {{range .Changes}}
+  <div class="card change">
+    <label>
+      <input type="checkbox" name="accept" value="{{.Index}}" checked>
+      <span>
+        <strong>{{.Change.Keyword}}</strong> <span class="muted">· {{.Change.TargetID}}</span><br>
+        <del>{{.Change.Before}}</del> → <ins>{{.Change.After}}</ins>
+        {{if .Change.Reason}}<br><span class="muted">{{.Change.Reason}}</span>{{end}}
+        {{if .Context}}<span class="ctx" style="display:block">Contexto: {{.Context}}</span>{{end}}
+      </span>
+    </label>
+  </div>
+  {{end}}
+  {{else}}
+  <p class="muted">No hay cambios válidos para aplicar.</p>
+  {{end}}
+
+  <div class="actions">
+    <button type="submit">Crear versión</button>
+    <a class="btn secondary" href="/jobs/new">Cancelar</a>
+  </div>
+</form>
+
+{{if .Dropped}}
+<h2>Descartados por la validación</h2>
+<p class="muted">La IA los propuso, pero no cumplen las reglas anti-invención. No se pueden aplicar desde acá; si te sirven, editalos a mano en el CV maestro.</p>
+{{range .Dropped}}
+<div class="card">
+  <strong>{{.Change.Keyword}}</strong> <span class="muted">· {{.Change.TargetID}}</span><br>
+  <del>{{.Change.Before}}</del> → <ins>{{.Change.After}}</ins><br>
+  <span class="error" style="display:inline-block;margin-top:6px;padding:3px 10px">{{.Why}}</span>
+</div>
+{{end}}
+{{end}}
+
+<h2>Keywords</h2>
+{{template "keywords" .Keywords}}
+{{end}}

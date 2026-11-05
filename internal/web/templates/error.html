@@ -1,0 +1,6 @@
+{{define "content"}}
+<h1>{{.Heading}}</h1>
+<p class="error">{{.Message}}</p>
+{{if .Detail}}<details><summary>Detalle técnico</summary><pre style="white-space:pre-wrap">{{.Detail}}</pre></details>{{end}}
+<div class="actions"><a class="btn secondary" href="/">Volver al inicio</a></div>
+{{end}}

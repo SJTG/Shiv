@@ -1,0 +1,42 @@
+{{define "content"}}
+<h1>{{if .Version.Job.Title}}{{.Version.Job.Title}}{{else}}Versión del CV{{end}}</h1>
+<p class="muted">{{if .Version.Job.Company}}{{.Version.Job.Company}} · {{end}}{{fmtTime .Version.CreatedAt}}</p>
+
+{{if .SkippedNote}}<p class="error">{{.SkippedNote}}</p>{{end}}
+{{if not .PDFReady}}<p class="error">No se puede generar el PDF: {{.PDFError}}. La vista previa sí funciona.</p>{{end}}
+
+<div class="actions">
+  {{if .PDFReady}}<a class="btn" href="/versions/{{.Version.ID}}/pdf">Descargar PDF</a>{{end}}
+  <a class="btn secondary" href="/versions/{{.Version.ID}}/preview" target="_blank" rel="noopener">Abrir vista previa</a>
+  <a class="btn secondary" href="/">Inicio</a>
+</div>
+
+<h2>Cambios</h2>
+{{if .Version.Changes}}
+<table>
+  <tr><th>Estado</th><th>Keyword</th><th>Antes → después</th></tr>
+  {{range .Version.Changes}}
+  <tr>
+    <td>{{if .Accepted}}<span class="badge present">aplicado</span>{{else}}<span class="badge missing">no aplicado</span>{{end}}</td>
+    <td>{{.Keyword}}</td>
+    <td><del>{{.Before}}</del> → <ins>{{.After}}</ins></td>
+  </tr>
+  {{end}}
+</table>
+{{else}}
+<p class="muted">Esta versión no tiene cambios: es tu CV maestro tal como estaba.</p>
+{{end}}
+
+<h2>Keywords de la oferta</h2>
+{{if .Version.Keywords}}
+<table>
+  <tr><th>Keyword</th><th>Estado</th></tr>
+  {{range .Version.Keywords}}
+  <tr><td>{{.Term}}</td><td><span class="badge {{.Status}}">{{statusLabel .Status}}</span></td></tr>
+  {{end}}
+</table>
+{{end}}
+
+<h2>Vista previa</h2>
+<iframe class="preview" sandbox src="/versions/{{.Version.ID}}/preview" title="Vista previa del CV"></iframe>
+{{end}}
